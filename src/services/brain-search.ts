@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
-import { supabase } from "../db/supabase.js";
+import { dbQuery, supabase } from "../db/supabase.js";
 import { getUserPreferences } from "./preferences.js";
 import { log } from "../utils/logger.js";
 
@@ -94,12 +94,32 @@ export async function searchBrain(query: string): Promise<string> {
 /**
  * Search summaries by keyword.
  */
-export async function searchSummaries(query: string): Promise<string> {
+export async function searchSummaries(query: string, userId?: string | null): Promise<string> {
   const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
 
   let results: any[] = [];
 
   for (const keyword of keywords) {
+    if (userId) {
+      const { rows } = await dbQuery(
+        `
+          SELECT
+            us.*,
+            json_build_object('title', v.title, 'category', v.category) AS videos
+          FROM user_summaries us
+          INNER JOIN videos v ON v.id = us.video_id
+          WHERE us.user_id = $1
+            AND (us.tldr ILIKE $2 OR us.skip_assessment ILIKE $2)
+          ORDER BY us.created_at DESC
+          LIMIT 5
+        `,
+        [userId, `%${keyword}%`]
+      );
+
+      if (rows.length) results.push(...rows);
+      continue;
+    }
+
     // Search across tldr and key_learnings
     const { data } = await supabase
       .from("summaries")

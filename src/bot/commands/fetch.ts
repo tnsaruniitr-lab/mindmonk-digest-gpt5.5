@@ -3,10 +3,11 @@ import { supabase } from "../../db/supabase.js";
 import { formatSummary } from "../formatter.js";
 import { processVideo } from "../../scheduler/cron.js";
 import { getOutputFormat } from "../../services/preferences.js";
+import { loadStoredSummary } from "../../services/summarizer.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
 import { getVideoMetadata } from "../../services/youtube.js";
 import { extractVideoId } from "../../utils/youtube-url.js";
-import type { Summary, Video } from "../../types/index.js";
+import type { Summary, UserSummary, Video } from "../../types/index.js";
 
 interface VideoSeed {
   channelId?: string | null;
@@ -35,7 +36,7 @@ async function getChannelName(video: Video): Promise<string> {
 async function sendSummaryToChat(
   ctx: Context,
   video: Video,
-  summary: Summary,
+  summary: Summary | UserSummary,
   channelName: string,
   userId?: string | null
 ): Promise<void> {
@@ -46,16 +47,6 @@ async function sendSummaryToChat(
     const options = msg.parseMode ? { parse_mode: msg.parseMode } : undefined;
     await ctx.reply(msg.text, options);
   }
-}
-
-async function loadSummary(videoId: string): Promise<Summary | null> {
-  const { data } = await supabase
-    .from("summaries")
-    .select("*")
-    .eq("video_id", videoId)
-    .single();
-
-  return (data as Summary | null) ?? null;
 }
 
 async function upsertVideo(videoId: string, seed: VideoSeed): Promise<Video | null> {
@@ -100,7 +91,7 @@ export async function summarizeVideoById(
   }
 
   if (video.processed) {
-    const summary = await loadSummary(video.id);
+    const summary = await loadStoredSummary(video.id, userId);
     if (summary) {
       await ctx.reply(`✅ Found cached summary for "${video.title}".`);
       await sendSummaryToChat(ctx, video, summary, await getChannelName(video), userId);
@@ -110,7 +101,7 @@ export async function summarizeVideoById(
     if (video.transcript_status === "unavailable") {
       await ctx.reply(`♻️ I previously could not find captions for "${video.title}". Checking again now...`);
     } else {
-      await ctx.reply(`♻️ "${video.title}" was marked processed, but the summary is missing. Reprocessing now...`);
+      await ctx.reply(`♻️ "${video.title}" is processed, but your personalized summary is missing. Creating it now...`);
     }
   } else {
     await ctx.reply(`⏳ Processing "${video.title}"...`);
@@ -132,7 +123,7 @@ export async function summarizeVideoById(
     return;
   }
 
-  const summary = result.summary ?? (await loadSummary(video.id));
+  const summary = result.summary ?? (await loadStoredSummary(video.id, userId));
   if (!summary) {
     await ctx.reply(`❌ Summary was generated, but I could not load it for "${video.title}".`);
     return;

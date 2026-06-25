@@ -54,6 +54,7 @@ const allowedTables = new Set([
   "videos",
   "transcripts",
   "summaries",
+  "user_summaries",
   "brain_objects",
   "user_context",
   "delivery_log",
@@ -584,6 +585,24 @@ export async function ensureDatabaseSchema(): Promise<void> {
       UNIQUE (video_id, language)
     );
 
+    CREATE TABLE IF NOT EXISTS user_summaries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      video_id uuid NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      transcript_id uuid REFERENCES transcripts(id) ON DELETE SET NULL,
+      tldr text,
+      key_learnings text[],
+      applicable_to_me text[],
+      action_items text[],
+      quotable_moments text[],
+      skip_assessment text,
+      model_used text,
+      tokens_used integer,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (user_id, video_id)
+    );
+
     CREATE TABLE IF NOT EXISTS brain_objects (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       type brain_object_type NOT NULL,
@@ -609,11 +628,16 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS delivery_log (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       summary_id uuid REFERENCES summaries(id) ON DELETE SET NULL,
+      user_summary_id uuid REFERENCES user_summaries(id) ON DELETE SET NULL,
+      user_id uuid REFERENCES users(id) ON DELETE SET NULL,
       telegram_chat_id text,
       telegram_message_id text,
       status text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE delivery_log ADD COLUMN IF NOT EXISTS user_summary_id uuid REFERENCES user_summaries(id) ON DELETE SET NULL;
+    ALTER TABLE delivery_log ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id) ON DELETE SET NULL;
 
     CREATE TABLE IF NOT EXISTS jobs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -644,6 +668,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_transcripts_video_id ON transcripts(video_id);
     CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts(source);
     CREATE INDEX IF NOT EXISTS idx_summaries_video_id ON summaries(video_id);
+    CREATE INDEX IF NOT EXISTS idx_user_summaries_user_video ON user_summaries(user_id, video_id);
+    CREATE INDEX IF NOT EXISTS idx_user_summaries_video_id ON user_summaries(video_id);
     CREATE INDEX IF NOT EXISTS idx_brain_objects_type ON brain_objects(type);
     CREATE INDEX IF NOT EXISTS idx_brain_objects_source_video_id ON brain_objects(source_video_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_status_run_after ON jobs(status, run_after, priority);

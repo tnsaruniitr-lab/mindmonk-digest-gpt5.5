@@ -116,7 +116,8 @@ Current tables:
 | `user_channel_subscriptions` | Per-user channel subscriptions |
 | `videos` | Global YouTube videos |
 | `transcripts` | Canonical transcript text and provider metadata |
-| `summaries` | Current generated summary cache, still one row per video |
+| `summaries` | Legacy/global generated summary cache |
+| `user_summaries` | Personalized summary per user/video |
 | `brain_objects` | Extracted principles, patterns, rules, and playbooks |
 | `user_context` | Single-owner context/preferences |
 | `delivery_log` | Telegram delivery records |
@@ -124,7 +125,8 @@ Current tables:
 
 Current constraints:
 
-- `summaries` are still global per video; Phase 5 moves personalized outputs to `user_summaries`.
+- Direct fetches and scheduled deliveries create/reuse `user_summaries` when a user is known.
+- `summaries` remains for legacy/global fallback paths.
 - Scheduled/RSS processing uses durable jobs, but on-demand `/fetch` still processes directly for fast Telegram feedback.
 - `user_context` remains only as a legacy compatibility table; normal user preferences live in `user_preferences`.
 - There is no quota, billing, or usage ledger yet.
@@ -532,7 +534,7 @@ Summary:
 | Channels | Global channels plus per-user subscriptions | Global channels plus per-user subscriptions |
 | Videos | Global | Global and deduped |
 | Transcripts | Canonical `transcripts` table | Canonical `transcripts` table with usage accounting |
-| Summaries | One summary per video | One personalized summary per user/video |
+| Summaries | One personalized summary per user/video for user-known paths | Delivery jobs, daily digest, and richer resend controls |
 | Queue | Durable `jobs` table for scheduled processing | Dedicated job types for transcript, summary, delivery, and extraction |
 | Workers | One app process | Horizontally scalable workers |
 | Audio | Temp `/tmp` in app container | Same, with queue limits and cleanup tracking |

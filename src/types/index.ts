@@ -122,6 +122,13 @@ export interface Summary {
   created_at: string;
 }
 
+export interface UserSummary extends Summary {
+  user_id: string;
+  transcript_id: string | null;
+  raw_transcript: null;
+  updated_at: string;
+}
+
 export interface BrainObject {
   id: string;
   type: BrainObjectType;

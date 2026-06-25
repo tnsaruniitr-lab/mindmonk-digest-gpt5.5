@@ -3,12 +3,12 @@ import { supabase } from "../db/supabase.js";
 import { pollAllChannels } from "../services/rss.js";
 import { getOrCreateTranscriptForVideo } from "../services/transcript.js";
 import { classifyVideo } from "../services/classifier.js";
-import { generateSummary } from "../services/summarizer.js";
+import { generateSummary, loadStoredSummary } from "../services/summarizer.js";
 import { extractBrainObjects } from "../services/brain-extractor.js";
 import { deliverSummary, deliverSummaryToChat, notify } from "../services/delivery.js";
 import { loadActiveSubscribers } from "../services/users.js";
 import { enqueueProcessVideoJob, getJobCounts } from "../jobs/queue.js";
-import type { Video, Channel, Summary } from "../types/index.js";
+import type { Video, Channel, Summary, UserSummary } from "../types/index.js";
 import type { Category } from "../types/index.js";
 import { log } from "../utils/logger.js";
 
@@ -25,7 +25,7 @@ interface ProcessVideoOptions {
 export interface ProcessVideoResult {
   status: "processed" | "no_transcript" | "summary_failed";
   channelName: string;
-  summary: Summary | null;
+  summary: Summary | UserSummary | null;
 }
 
 /**
@@ -57,65 +57,85 @@ export async function processVideo(
     }
     return { status: "no_transcript", channelName, summary: null };
   }
+  const transcriptRow = transcript;
 
   // 2. Classify
   const category = await classifyVideo(
     video.title,
     channelName,
-    transcript.text.slice(0, 2000),
+    transcriptRow.text.slice(0, 2000),
     defaultCategory
   );
 
   await supabase.from("videos").update({ category }).eq("id", video.id);
   video.category = category;
 
-  // 3. Generate summary (Pass 1)
-  const summaryData = await generateSummary(
-    video.id,
-    transcript.text,
-    category,
-    video.title,
-    channelName,
-    options.userId
-  );
+  async function ensureSummary(userId?: string | null): Promise<Summary | UserSummary | null> {
+    const cached = await loadStoredSummary(video.id, userId);
+    if (cached) return cached;
 
-  if (!summaryData) {
-    if (shouldNotifyOnFailure) {
-      await notify(`❌ Failed to summarize "${video.title}"`);
-    }
-    return { status: "summary_failed", channelName, summary: null };
+    const summaryData = await generateSummary(
+      video.id,
+      transcriptRow.text,
+      category,
+      video.title,
+      channelName,
+      userId,
+      transcriptRow.id
+    );
+
+    if (!summaryData) return null;
+    return loadStoredSummary(video.id, userId);
   }
 
-  // 4. Fetch the stored summary row for delivery
-  const { data: summaryRow } = await supabase
-    .from("summaries")
-    .select("*")
-    .eq("video_id", video.id)
-    .single();
+  let resultSummary: Summary | UserSummary | null = null;
 
-  if (summaryRow && shouldDeliver) {
-    // 5. Deliver to Telegram
+  if (shouldDeliver) {
     const subscribers = video.channel_id ? await loadActiveSubscribers(video.channel_id) : [];
 
     if (subscribers.length) {
       for (const subscriber of subscribers) {
+        const subscriberSummary = await ensureSummary(subscriber.id);
+        if (!subscriberSummary) {
+          if (shouldNotifyOnFailure) {
+            await notify(`❌ Failed to summarize "${video.title}" for a subscriber`);
+          }
+          return { status: "summary_failed", channelName, summary: resultSummary };
+        }
+
+        resultSummary ??= subscriberSummary;
         await deliverSummaryToChat(
           video,
-          summaryRow as Summary,
+          subscriberSummary,
           channelName,
           subscriber.telegram_chat_id,
           subscriber.id
         );
       }
     } else {
-      await deliverSummary(video, summaryRow as Summary, channelName);
+      resultSummary = await ensureSummary(options.userId ?? null);
+      if (!resultSummary) {
+        if (shouldNotifyOnFailure) {
+          await notify(`❌ Failed to summarize "${video.title}"`);
+        }
+        return { status: "summary_failed", channelName, summary: null };
+      }
+      await deliverSummary(video, resultSummary, channelName);
+    }
+  } else {
+    resultSummary = await ensureSummary(options.userId ?? null);
+    if (!resultSummary) {
+      if (shouldNotifyOnFailure) {
+        await notify(`❌ Failed to summarize "${video.title}"`);
+      }
+      return { status: "summary_failed", channelName, summary: null };
     }
   }
 
-  // 6. Mark processed
+  // 4. Mark processed
   await supabase.from("videos").update({ processed: true }).eq("id", video.id);
 
-  // 7. Brain object extraction (Pass 2 — only for actionable categories)
+  // 5. Brain object extraction (Pass 2 — only for actionable categories)
   const brainCategories = ["investing", "seo_marketing", "tech_ai_startup", "psychology"];
   const shouldExtractBrain = brainCategories.includes(category);
 
@@ -125,7 +145,7 @@ export async function processVideo(
     category === "podcast_interview" && podcastBrainTopics.test(video.title);
 
   if (shouldExtractBrain || isPodcastWithBrainValue) {
-    extractBrainObjects(video.id, transcript.text, video.title, channelName, category)
+    extractBrainObjects(video.id, transcriptRow.text, video.title, channelName, category)
       .then((count) => {
         if (count > 0) {
           notify(`🧠 ${count} brain objects extracted from "${video.title}"`);
@@ -139,7 +159,7 @@ export async function processVideo(
   return {
     status: "processed",
     channelName,
-    summary: (summaryRow as Summary | null) ?? null,
+    summary: resultSummary,
   };
 }
 

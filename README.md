@@ -179,7 +179,7 @@ Reset to the default layout:
 ## Processing Flow
 
 ```text
-YouTube RSS -> videos table -> jobs table -> transcripts table -> classification -> summary -> Telegram delivery
+YouTube RSS -> videos table -> jobs table -> transcripts table -> classification -> user_summaries/summaries -> Telegram delivery
 ```
 
-The scheduler polls RSS every 20 minutes and enqueues pending videos every 5 minutes. The worker claims jobs with Postgres row locks so retries and future multi-worker processing are safer. Transcripts are stored once per video/language in `transcripts`; summaries reuse that canonical transcript instead of writing new raw transcript blobs into `summaries`.
+The scheduler polls RSS every 20 minutes and enqueues pending videos every 5 minutes. The worker claims jobs with Postgres row locks so retries and future multi-worker processing are safer. Transcripts are stored once per video/language in `transcripts`; user-specific digests are stored in `user_summaries` and reuse that canonical transcript instead of writing new raw transcript blobs into `summaries`.

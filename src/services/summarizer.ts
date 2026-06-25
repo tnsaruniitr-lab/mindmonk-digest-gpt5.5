@@ -4,7 +4,13 @@ import { supabase } from "../db/supabase.js";
 import { SUMMARY_SYSTEM_PROMPT, buildSummaryPrompt } from "../prompts/summary-base.js";
 import { gradeIdeasWithConfiguredLlm } from "./idea-grader.js";
 import { getUserPreferences } from "./preferences.js";
-import { SummaryResponseSchema, type Category, type SummaryResponse } from "../types/index.js";
+import {
+  SummaryResponseSchema,
+  type Category,
+  type Summary,
+  type SummaryResponse,
+  type UserSummary,
+} from "../types/index.js";
 import { withRetry } from "../utils/retry.js";
 import { log } from "../utils/logger.js";
 
@@ -24,7 +30,8 @@ export async function generateSummary(
   category: Category,
   videoTitle: string,
   channelName: string,
-  userId?: string | null
+  userId?: string | null,
+  transcriptId?: string | null
 ): Promise<SummaryResponse | null> {
   try {
     const preferences = await getUserPreferences(userId);
@@ -74,24 +81,34 @@ export async function generateSummary(
       summaryData.skip_assessment = externalGrade;
     }
 
-    // Store in DB
     const tokensUsed =
       (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
 
-    await supabase.from("summaries").upsert(
-      {
-        video_id: videoId,
-        tldr: summaryData.tldr,
-        key_learnings: summaryData.key_learnings,
-        applicable_to_me: summaryData.applicable_to_me,
-        action_items: summaryData.action_items,
-        quotable_moments: summaryData.quotable_moments,
-        skip_assessment: summaryData.skip_assessment,
-        model_used: config.ANTHROPIC_MODEL,
-        tokens_used: tokensUsed,
-      },
-      { onConflict: "video_id" }
-    );
+    const summaryRow = {
+      video_id: videoId,
+      tldr: summaryData.tldr,
+      key_learnings: summaryData.key_learnings,
+      applicable_to_me: summaryData.applicable_to_me,
+      action_items: summaryData.action_items,
+      quotable_moments: summaryData.quotable_moments,
+      skip_assessment: summaryData.skip_assessment,
+      model_used: config.ANTHROPIC_MODEL,
+      tokens_used: tokensUsed,
+    };
+
+    if (userId) {
+      await supabase.from("user_summaries").upsert(
+        {
+          ...summaryRow,
+          user_id: userId,
+          transcript_id: transcriptId ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,video_id" }
+      );
+    } else {
+      await supabase.from("summaries").upsert(summaryRow, { onConflict: "video_id" });
+    }
 
     log.info("summarizer", `Summary generated for "${videoTitle}" (${tokensUsed} tokens)`);
     return summaryData;
@@ -99,4 +116,28 @@ export async function generateSummary(
     log.error("summarizer", `Failed to summarize "${videoTitle}"`, err);
     return null;
   }
+}
+
+export async function loadStoredSummary(
+  videoId: string,
+  userId?: string | null
+): Promise<Summary | UserSummary | null> {
+  if (userId) {
+    const { data } = await supabase
+      .from("user_summaries")
+      .select("*")
+      .eq("video_id", videoId)
+      .eq("user_id", userId)
+      .single();
+
+    return (data as UserSummary | null) ?? null;
+  }
+
+  const { data } = await supabase
+    .from("summaries")
+    .select("*")
+    .eq("video_id", videoId)
+    .single();
+
+  return (data as Summary | null) ?? null;
 }

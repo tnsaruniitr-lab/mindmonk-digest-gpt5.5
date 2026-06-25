@@ -33,19 +33,21 @@ export async function reprocessCommand(ctx: Context) {
     return;
   }
 
-  await ctx.reply(`♻️ Reprocessing "${video.title}"...`);
+  await ctx.reply(`♻️ Reprocessing your summary for "${video.title}"...`);
 
-  // Delete existing summary and brain objects
-  await supabase.from("summaries").delete().eq("video_id", video.id);
-  await supabase.from("brain_objects").delete().eq("source_video_id", video.id);
-
-  // Reset video state
   await supabase
-    .from("videos")
-    .update({ processed: false, transcript_status: "pending" })
-    .eq("id", video.id);
+    .from("user_summaries")
+    .delete()
+    .eq("video_id", video.id)
+    .eq("user_id", user.id);
 
-  // Refetch the updated video
+  if (video.transcript_status === "unavailable") {
+    await supabase
+      .from("videos")
+      .update({ processed: false, transcript_status: "pending" })
+      .eq("id", video.id);
+  }
+
   const { data: updatedVideo } = await supabase
     .from("videos")
     .select("*")

@@ -3,10 +3,12 @@ import { supabase } from "../db/supabase.js";
 import { ownerChatId } from "../config.js";
 import { formatSummary } from "../bot/formatter.js";
 import { getOutputFormat } from "./preferences.js";
-import type { Video, Summary } from "../types/index.js";
+import type { Video, Summary, UserSummary } from "../types/index.js";
 import { log } from "../utils/logger.js";
 
 let botInstance: Telegraf<Context> | null = null;
+
+type DeliverableSummary = Summary | UserSummary;
 
 export function setBot(bot: Telegraf<Context>) {
   botInstance = bot;
@@ -17,7 +19,7 @@ export function setBot(bot: Telegraf<Context>) {
  */
 export async function deliverSummary(
   video: Video,
-  summary: Summary,
+  summary: DeliverableSummary,
   channelName: string,
   brainObjectCount?: number
 ): Promise<boolean> {
@@ -31,7 +33,7 @@ export async function deliverSummary(
 
 export async function deliverSummaryToChat(
   video: Video,
-  summary: Summary,
+  summary: DeliverableSummary,
   channelName: string,
   telegramChatId: string,
   userId?: string | null,
@@ -57,9 +59,13 @@ export async function deliverSummaryToChat(
       lastMessageId = sent.message_id;
     }
 
+    const isUserSummary = "user_id" in summary && Boolean(summary.user_id);
+
     // Log delivery
     await supabase.from("delivery_log").insert({
-      summary_id: summary.id,
+      summary_id: isUserSummary ? null : summary.id,
+      user_summary_id: isUserSummary ? summary.id : null,
+      user_id: userId ?? (isUserSummary ? summary.user_id : null),
       telegram_chat_id: telegramChatId,
       telegram_message_id: lastMessageId?.toString() ?? null,
       status: "sent",
@@ -71,7 +77,9 @@ export async function deliverSummaryToChat(
     log.error("delivery", `Failed to deliver summary for "${video.title}" to chat ${telegramChatId}`, err);
 
     await supabase.from("delivery_log").insert({
-      summary_id: summary.id,
+      summary_id: "user_id" in summary && summary.user_id ? null : summary.id,
+      user_summary_id: "user_id" in summary && summary.user_id ? summary.id : null,
+      user_id: userId ?? ("user_id" in summary ? summary.user_id : null),
       telegram_chat_id: telegramChatId,
       status: "failed",
     });

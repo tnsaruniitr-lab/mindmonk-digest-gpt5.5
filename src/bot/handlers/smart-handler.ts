@@ -108,7 +108,7 @@ export async function smartHandler(ctx: Context) {
 
     case "search_summaries":
       if (intent.query) {
-        const result = await searchSummaries(intent.query);
+        const result = await searchSummaries(intent.query, user.id);
         await ctx.reply(result);
       } else {
         await ctx.reply("What are you looking for in your summaries?");
