@@ -8,6 +8,9 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_KEY: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),
+  GRADER_LLM_BASE_URL: z.string().optional().default("https://api.openai.com/v1"),
+  GRADER_LLM_MODEL: z.string().optional().default(""),
+  GRADER_LLM_API_KEY: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

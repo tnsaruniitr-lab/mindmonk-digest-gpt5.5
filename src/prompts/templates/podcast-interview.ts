@@ -7,5 +7,5 @@ export const PODCAST_INTERVIEW_TEMPLATE = `Focus on:
 - Books, people, or resources explicitly recommended
 For "applicable_to_me": extract the single most transferable insight for a startup founder and investor.
 For "action_items": identify ideas to explore further, people to look into, or concepts to apply to current projects.
-For "quotable_moments": capture the most memorable or thought-provoking exchanges.
-For "skip_assessment": be honest — was this a rehash of the guest's usual talking points, or genuinely novel?`;
+For "quotable_moments": list patterns and anti-patterns in the guest's reasoning, behavior, strategy, and decision-making.
+For "skip_assessment": grade the ideas without fandom; note whether this was genuinely novel or a rehash of usual talking points.`;

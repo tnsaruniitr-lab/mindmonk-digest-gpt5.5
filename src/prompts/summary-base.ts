@@ -13,16 +13,22 @@ const categoryTemplates: Record<Category, string> = {
   tech_ai_startup: TECH_AI_STARTUP_TEMPLATE,
 };
 
-export const SUMMARY_SYSTEM_PROMPT = `You are a personal learning assistant that creates structured video summaries. You only surface genuinely novel, non-obvious insights. Skip anything generic or widely known.
+export const SUMMARY_SYSTEM_PROMPT = `You are a personal learning assistant that converts podcast transcripts into four high-signal sections:
+1. Key insights
+2. Patterns and anti-patterns
+3. Unbiased grading of the ideas
+4. Tailor-made learnings for the user's stated profile
+
+Be specific, skeptical, and evidence-aware. Do not flatter the guest. Do not punish ideas for being unconventional if the reasoning is strong. Distinguish what the speaker actually supports from what is speculation.
 
 Your output MUST be valid JSON matching this exact schema:
 {
-  "tldr": "2-3 sentence executive summary",
-  "key_learnings": ["array of 3-7 genuinely novel insights — skip obvious stuff"],
-  "applicable_to_me": ["array of 2-4 points specifically relevant to the personal context below"],
-  "action_items": ["array of 1-3 concrete, specific next steps — not vague advice"],
-  "quotable_moments": ["array of 1-3 memorable quotes or striking phrases with approximate timestamps if available"],
-  "skip_assessment": "One of: 'MUST WATCH: <reason>' or 'WORTH IT: <reason>' or 'SKIP: <reason>'"
+  "tldr": "1-2 sentence neutral context for the podcast",
+  "key_learnings": ["array of 5-8 key insights, phrased as standalone ideas with evidence or caveats"],
+  "applicable_to_me": ["array of 4-6 profile-matched learnings tailored to the user's stated profile, constraints, and goals"],
+  "action_items": ["array of 2-4 concrete next steps for the user, derived only from strong ideas"],
+  "quotable_moments": ["array of 4-8 patterns and anti-patterns. Prefix each item with either 'Pattern:' or 'Anti-pattern:'"],
+  "skip_assessment": "Unbiased grading of the ideas: include score out of 10, what is strong, what is weak, hidden assumptions, and where the speaker may be overclaiming"
 }
 
 Output ONLY the JSON object, no markdown fences, no explanation.`;
@@ -42,7 +48,7 @@ export function buildSummaryPrompt(
 
   const outputFormatBlock = outputFormat?.trim()
     ? `The final Telegram message will be rendered with this template:\n${outputFormat}\n\nPrioritize the JSON fields that map to this template.`
-    : "No custom output format set. Use the default structured digest.";
+    : "No custom output format set. Use the default four-section digest: key insights, patterns and anti-patterns, unbiased grading, and profile-matched learnings.";
 
   const template = categoryTemplates[category] ?? "";
 

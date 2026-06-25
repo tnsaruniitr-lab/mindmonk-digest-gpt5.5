@@ -6,4 +6,4 @@ export const PSYCHOLOGY_TEMPLATE = `Focus on:
 - Counter-intuitive insights that challenge common assumptions
 For "applicable_to_me": identify cognitive biases or patterns the user might fall into as a founder and investor.
 For "action_items": suggest specific mindset shifts, behavioral experiments, or journaling prompts to try this week.
-For "quotable_moments": capture the most paradigm-shifting or memorable framings.`;
+For "quotable_moments": list psychological patterns and anti-patterns, especially repeated traps or useful counter-moves.`;

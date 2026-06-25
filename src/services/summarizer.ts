@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { supabase } from "../db/supabase.js";
 import { SUMMARY_SYSTEM_PROMPT, buildSummaryPrompt } from "../prompts/summary-base.js";
+import { gradeIdeasWithConfiguredLlm } from "./idea-grader.js";
 import { getUserPreferences } from "./preferences.js";
 import { SummaryResponseSchema, type Category, type SummaryResponse } from "../types/index.js";
 import { withRetry } from "../utils/retry.js";
@@ -59,6 +60,19 @@ export async function generateSummary(
       return null;
     }
 
+    const summaryData: SummaryResponse = { ...parsed.data };
+    const externalGrade = await gradeIdeasWithConfiguredLlm({
+      videoTitle,
+      channelName,
+      category,
+      summary: summaryData,
+      userContextEntries: preferences.personalContext,
+    });
+
+    if (externalGrade) {
+      summaryData.skip_assessment = externalGrade;
+    }
+
     // Store in DB
     const tokensUsed =
       (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
@@ -66,12 +80,12 @@ export async function generateSummary(
     await supabase.from("summaries").upsert(
       {
         video_id: videoId,
-        tldr: parsed.data.tldr,
-        key_learnings: parsed.data.key_learnings,
-        applicable_to_me: parsed.data.applicable_to_me,
-        action_items: parsed.data.action_items,
-        quotable_moments: parsed.data.quotable_moments,
-        skip_assessment: parsed.data.skip_assessment,
+        tldr: summaryData.tldr,
+        key_learnings: summaryData.key_learnings,
+        applicable_to_me: summaryData.applicable_to_me,
+        action_items: summaryData.action_items,
+        quotable_moments: summaryData.quotable_moments,
+        skip_assessment: summaryData.skip_assessment,
         raw_transcript: transcript,
         model_used: "claude-sonnet-4-20250514",
         tokens_used: tokensUsed,
@@ -80,7 +94,7 @@ export async function generateSummary(
     );
 
     log.info("summarizer", `Summary generated for "${videoTitle}" (${tokensUsed} tokens)`);
-    return parsed.data;
+    return summaryData;
   } catch (err) {
     log.error("summarizer", `Failed to summarize "${videoTitle}"`, err);
     return null;

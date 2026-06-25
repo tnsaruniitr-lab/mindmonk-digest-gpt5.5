@@ -2,6 +2,25 @@ import type { Summary, Video } from "../types/index.js";
 
 const MAX_MSG_LENGTH = 4096;
 
+export const DEFAULT_OUTPUT_FORMAT = `{{title}}
+{{channel}} | {{category}}
+{{source_url}}
+
+1. Key insights
+{{key_insights_numbered}}
+
+2. Patterns and anti-patterns
+{{patterns_antipatterns}}
+
+3. Unbiased grading of the ideas
+{{unbiased_grading}}
+
+4. Tailor-made learnings for my profile
+{{tailored_learnings}}
+
+Next actions
+{{tailored_actions}}`;
+
 export interface FormattedMessage {
   text: string;
   parseMode?: "MarkdownV2";
@@ -56,14 +75,29 @@ function renderCustomFormat(
     youtube_url: sourceUrl,
     published_at: video.published_at ?? "",
     tldr: summary.tldr ?? "",
+    key_insights: plainList(summary.key_learnings),
+    key_insights_numbered: numberedList(summary.key_learnings),
     key_learnings: plainList(summary.key_learnings),
     key_learnings_numbered: numberedList(summary.key_learnings),
+    tailored_learnings: plainList(summary.applicable_to_me),
+    tailored_learnings_numbered: numberedList(summary.applicable_to_me),
+    profile_matched_learnings: plainList(summary.applicable_to_me),
+    profile_matched_learnings_numbered: numberedList(summary.applicable_to_me),
     applicable_to_me: plainList(summary.applicable_to_me),
     applicable_to_me_numbered: numberedList(summary.applicable_to_me),
+    tailored_actions: plainList(summary.action_items),
+    tailored_actions_numbered: numberedList(summary.action_items),
     action_items: plainList(summary.action_items),
     action_items_numbered: numberedList(summary.action_items),
+    patterns_antipatterns: plainList(summary.quotable_moments),
+    patterns_antipatterns_numbered: numberedList(summary.quotable_moments),
+    patterns_and_antipatterns: plainList(summary.quotable_moments),
+    patterns_and_antipatterns_numbered: numberedList(summary.quotable_moments),
     quotable_moments: plainList(summary.quotable_moments),
     quotable_moments_numbered: numberedList(summary.quotable_moments),
+    unbiased_grading: summary.skip_assessment ?? "",
+    idea_grade: summary.skip_assessment ?? "",
+    idea_grading: summary.skip_assessment ?? "",
     skip_assessment: summary.skip_assessment ?? "",
     brain_object_count: brainObjectCount?.toString() ?? "0",
   };
@@ -80,64 +114,14 @@ export function formatSummary(
   brainObjectCount?: number,
   outputFormat?: string | null
 ): FormattedMessage[] {
-  if (outputFormat?.trim()) {
-    return splitMessage(
-      renderCustomFormat(outputFormat, video, summary, channelName, brainObjectCount)
-    );
-  }
-
-  const cat = video.category ?? "general";
-  const title = escapeMarkdown(video.title);
-  const channel = escapeMarkdown(channelName);
-
-  let msg = `*${title}*\n`;
-  msg += `${channel} \\| ${cat}\n\n`;
-
-  if (summary.tldr) {
-    msg += `*TL;DR*\n${escapeMarkdown(summary.tldr)}\n\n`;
-  }
-
-  if (summary.key_learnings?.length) {
-    msg += `*Key Learnings*\n`;
-    summary.key_learnings.forEach((l, i) => {
-      msg += `${i + 1}\\. ${escapeMarkdown(l)}\n`;
-    });
-    msg += "\n";
-  }
-
-  if (summary.applicable_to_me?.length) {
-    msg += `*Applicable to Me*\n`;
-    summary.applicable_to_me.forEach((a) => {
-      msg += `• ${escapeMarkdown(a)}\n`;
-    });
-    msg += "\n";
-  }
-
-  if (summary.action_items?.length) {
-    msg += `*Action Items*\n`;
-    summary.action_items.forEach((a) => {
-      msg += `☐ ${escapeMarkdown(a)}\n`;
-    });
-    msg += "\n";
-  }
-
-  if (summary.quotable_moments?.length) {
-    msg += `*Quotable Moments*\n`;
-    summary.quotable_moments.forEach((q) => {
-      msg += `> ${escapeMarkdown(q)}\n`;
-    });
-    msg += "\n";
-  }
-
-  if (summary.skip_assessment) {
-    msg += `*Skip?* ${escapeMarkdown(summary.skip_assessment)}\n`;
-  }
+  const template = outputFormat?.trim() || DEFAULT_OUTPUT_FORMAT;
+  let msg = renderCustomFormat(template, video, summary, channelName, brainObjectCount);
 
   if (brainObjectCount !== undefined && brainObjectCount > 0) {
-    msg += `\n🧠 *${brainObjectCount} brain objects extracted*`;
+    msg += `\n\nBrain objects extracted: ${brainObjectCount}`;
   }
 
-  return splitMessage(msg, "MarkdownV2");
+  return splitMessage(msg);
 }
 
 export function formatBrainObject(obj: {

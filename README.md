@@ -9,6 +9,7 @@ A personal Telegram bot that tracks favorite YouTube channels, detects new uploa
 - Queue newly published videos.
 - Fetch English transcripts from YouTube captions.
 - Generate a structured summary with Anthropic.
+- Optionally grade the ideas with a separate OpenAI-compatible grader LLM.
 - Render the result in your preferred Telegram format.
 - Send the digest to your Telegram chat.
 
@@ -28,7 +29,12 @@ TELEGRAM_CHAT_ID=
 SUPABASE_URL=
 SUPABASE_SERVICE_KEY=
 ANTHROPIC_API_KEY=
+GRADER_LLM_BASE_URL=https://api.openai.com/v1
+GRADER_LLM_MODEL=
+GRADER_LLM_API_KEY=
 ```
+
+The grader LLM fields are optional. Leave them blank to use the main summarizer's grading. Fill them when you want the "Unbiased grading" section to be produced by a separate model. Do not commit a real API key.
 
 3. Install dependencies:
 
@@ -68,11 +74,19 @@ Categories:
 - `seo_marketing`
 - `tech_ai_startup`
 
+## Profile Context
+
+Set your profile so the fourth section can match ideas to you:
+
+```text
+/set_context profile I am a SaaS founder building AI-powered SEO tools. I care about practical growth, durable moats, product velocity, and investment-quality thinking.
+```
+
 ## Preferred Output Format
 
 Send `/set_format` with a multi-line template. Future Telegram digests will use that layout.
 
-Example:
+Default format:
 
 ```text
 /set_format
@@ -80,20 +94,20 @@ Example:
 {{channel}} | {{category}}
 {{source_url}}
 
-TL;DR
-{{tldr}}
+1. Key insights
+{{key_insights_numbered}}
 
-Best ideas
-{{key_learnings_numbered}}
+2. Patterns and anti-patterns
+{{patterns_antipatterns}}
 
-Why this matters to me
-{{applicable_to_me}}
+3. Unbiased grading of the ideas
+{{unbiased_grading}}
+
+4. Tailor-made learnings for my profile
+{{tailored_learnings}}
 
 Next actions
-{{action_items}}
-
-Watch decision
-{{skip_assessment}}
+{{tailored_actions}}
 ```
 
 Available placeholders:
@@ -102,16 +116,16 @@ Available placeholders:
 - `{{channel}}`
 - `{{category}}`
 - `{{source_url}}`
-- `{{tldr}}`
-- `{{key_learnings}}`
-- `{{key_learnings_numbered}}`
-- `{{applicable_to_me}}`
-- `{{applicable_to_me_numbered}}`
-- `{{action_items}}`
-- `{{action_items_numbered}}`
-- `{{quotable_moments}}`
-- `{{quotable_moments_numbered}}`
-- `{{skip_assessment}}`
+- `{{key_insights}}`
+- `{{key_insights_numbered}}`
+- `{{patterns_antipatterns}}`
+- `{{patterns_antipatterns_numbered}}`
+- `{{unbiased_grading}}`
+- `{{idea_grade}}`
+- `{{tailored_learnings}}`
+- `{{tailored_learnings_numbered}}`
+- `{{tailored_actions}}`
+- `{{tailored_actions_numbered}}`
 - `{{brain_object_count}}`
 
 Reset to the default layout:

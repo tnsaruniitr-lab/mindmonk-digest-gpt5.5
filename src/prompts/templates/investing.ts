@@ -6,4 +6,4 @@ export const INVESTING_TEMPLATE = `Focus on:
 - Contrarian vs consensus positioning
 For "applicable_to_me": frame insights in terms of portfolio decisions and risk management.
 For "action_items": specify concrete research tasks, watchlist additions, or position sizing considerations.
-For "quotable_moments": capture the most conviction-heavy or data-backed statements.`;
+For "quotable_moments": list investing patterns and anti-patterns, including risk behavior and reasoning quality.`;
