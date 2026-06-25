@@ -61,7 +61,7 @@ npm run dev
 
 Railway's public URL expects an HTTP listener, so the app starts a small health server on `process.env.PORT`.
 
-- `/` and `/health` return a JSON health response.
+- `/` serves the product landing page and `/health` returns a JSON health response.
 - In Railway, set `DATABASE_URL` from the attached Postgres service.
 - Set `BOT_MODE=webhook` and `TELEGRAM_WEBHOOK_URL=https://<your-railway-domain>/telegram/<secret>` to avoid Telegram long-polling conflicts.
 - The real product interface is still Telegram.
@@ -74,6 +74,8 @@ Railway's public URL expects an HTTP listener, so the app starts a small health 
 - `/add_channel <youtube_url> [category]` - track a YouTube channel.
 - `/remove_channel <name>` - stop tracking a channel.
 - `/list_channels` - show tracked channels.
+- `/fetch <youtube_video_url>` - summarize one video now, or resend the cached summary.
+- `/channel <youtube_channel_url>` - summarize the latest video from a channel.
 - `/digest <youtube_video_url>` - summarize one video now.
 - `/set_context <label> <text>` - add personal context for better summaries.
 - `/set_format` - show or set your preferred digest template.

@@ -9,6 +9,8 @@ export async function helpCommand(ctx: Context) {
       `/add\\_channel \\<url\\> \\[category\\] — Track a YouTube channel\n` +
       `/remove\\_channel \\<name\\> — Stop tracking a channel\n` +
       `/list\\_channels — Show all tracked channels\n` +
+      `/fetch \\<url\\> — Summarize a single YouTube video now\n` +
+      `/channel \\<url\\> — Summarize the latest video from a channel\n` +
       `/digest \\<url\\> — Summarize a single video now\n` +
       `/status — Processing queue stats\n` +
       `/brain \\[type\\] — Browse brain objects\n` +

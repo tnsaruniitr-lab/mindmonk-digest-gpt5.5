@@ -14,10 +14,27 @@ let rssJob: cron.ScheduledTask | null = null;
 let queueJob: cron.ScheduledTask | null = null;
 let processing = false;
 
+interface ProcessVideoOptions {
+  deliver?: boolean;
+  notifyOnFailure?: boolean;
+}
+
+export interface ProcessVideoResult {
+  status: "processed" | "no_transcript" | "summary_failed";
+  channelName: string;
+  summary: Summary | null;
+}
+
 /**
  * Process a single video through the full pipeline.
  */
-export async function processVideo(video: Video): Promise<void> {
+export async function processVideo(
+  video: Video,
+  options: ProcessVideoOptions = {}
+): Promise<ProcessVideoResult> {
+  const shouldDeliver = options.deliver ?? true;
+  const shouldNotifyOnFailure = options.notifyOnFailure ?? true;
+
   // Get channel info
   const { data: channel } = await supabase
     .from("channels")
@@ -31,8 +48,10 @@ export async function processVideo(video: Video): Promise<void> {
   // 1. Fetch transcript
   const transcript = await getTranscriptForVideo(video.youtube_video_id, video.id);
   if (!transcript) {
-    await notify(`⚠️ No captions available for "${video.title}" from ${channelName}`);
-    return;
+    if (shouldNotifyOnFailure) {
+      await notify(`⚠️ No captions available for "${video.title}" from ${channelName}`);
+    }
+    return { status: "no_transcript", channelName, summary: null };
   }
 
   // 2. Classify
@@ -44,6 +63,7 @@ export async function processVideo(video: Video): Promise<void> {
   );
 
   await supabase.from("videos").update({ category }).eq("id", video.id);
+  video.category = category;
 
   // 3. Generate summary (Pass 1)
   const summaryData = await generateSummary(
@@ -55,8 +75,10 @@ export async function processVideo(video: Video): Promise<void> {
   );
 
   if (!summaryData) {
-    await notify(`❌ Failed to summarize "${video.title}"`);
-    return;
+    if (shouldNotifyOnFailure) {
+      await notify(`❌ Failed to summarize "${video.title}"`);
+    }
+    return { status: "summary_failed", channelName, summary: null };
   }
 
   // 4. Fetch the stored summary row for delivery
@@ -66,7 +88,7 @@ export async function processVideo(video: Video): Promise<void> {
     .eq("video_id", video.id)
     .single();
 
-  if (summaryRow) {
+  if (summaryRow && shouldDeliver) {
     // 5. Deliver to Telegram
     await deliverSummary(video, summaryRow as Summary, channelName);
   }
@@ -94,6 +116,12 @@ export async function processVideo(video: Video): Promise<void> {
   } else {
     log.info("cron", `Skipping brain extraction for "${video.title}" (${category} — not actionable)`);
   }
+
+  return {
+    status: "processed",
+    channelName,
+    summary: (summaryRow as Summary | null) ?? null,
+  };
 }
 
 /**
