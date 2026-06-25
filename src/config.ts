@@ -18,6 +18,7 @@ const envSchema = z.object({
   BOT_MODE: z.enum(["auto", "polling", "webhook"]).optional().default("auto"),
   DATABASE_URL: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),
+  ANTHROPIC_MODEL: z.string().optional().default("claude-sonnet-4-6"),
   GRADER_LLM_BASE_URL: optionalHttpUrl.default("https://api.openai.com/v1"),
   GRADER_LLM_MODEL: z.string().optional().default(""),
   GRADER_LLM_API_KEY: z.string().optional().default(""),

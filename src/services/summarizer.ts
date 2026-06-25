@@ -40,7 +40,7 @@ export async function generateSummary(
     const response = await withRetry(
       () =>
         getClient().messages.create({
-          model: "claude-sonnet-4-20250514",
+          model: config.ANTHROPIC_MODEL,
           max_tokens: 4096,
           system: SUMMARY_SYSTEM_PROMPT,
           messages: [{ role: "user", content: userPrompt }],
@@ -87,7 +87,7 @@ export async function generateSummary(
         quotable_moments: summaryData.quotable_moments,
         skip_assessment: summaryData.skip_assessment,
         raw_transcript: transcript,
-        model_used: "claude-sonnet-4-20250514",
+        model_used: config.ANTHROPIC_MODEL,
         tokens_used: tokensUsed,
       },
       { onConflict: "video_id" }

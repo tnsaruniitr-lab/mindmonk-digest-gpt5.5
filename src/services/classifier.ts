@@ -37,7 +37,7 @@ export async function classifyVideo(
     const response = await withRetry(
       () =>
         getClient().messages.create({
-          model: "claude-sonnet-4-20250514",
+          model: config.ANTHROPIC_MODEL,
           max_tokens: 200,
           system: CLASSIFY_SYSTEM_PROMPT,
           messages: [{ role: "user", content: userPrompt }],

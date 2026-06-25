@@ -71,7 +71,7 @@ Output ONLY JSON, no markdown fences.`;
 export async function classifyIntent(message: string): Promise<Intent> {
   try {
     const response = await getClient().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: config.ANTHROPIC_MODEL,
       max_tokens: 200,
       system: ROUTER_PROMPT,
       messages: [{ role: "user", content: message }],

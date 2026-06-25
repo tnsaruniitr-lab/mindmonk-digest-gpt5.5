@@ -208,7 +208,7 @@ export async function getMyContext(): Promise<string> {
 export async function generateChatResponse(message: string): Promise<string> {
   try {
     const response = await getClient().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: config.ANTHROPIC_MODEL,
       max_tokens: 300,
       system: `You are MindMonk, a personal YouTube digest bot. You track YouTube channels, summarize videos with structured insights, and build a personal knowledge base ("brain") from video content.
 
