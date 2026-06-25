@@ -2,6 +2,7 @@
 import { fetchTranscript as ytFetch } from "../../node_modules/youtube-transcript/dist/youtube-transcript.esm.js";
 import { supabase } from "../db/supabase.js";
 import { log } from "../utils/logger.js";
+import { fetchAudioTranscript } from "./audio-transcription.js";
 
 /**
  * Fetch YouTube transcript for a video.
@@ -13,24 +14,26 @@ export async function fetchTranscript(videoId: string): Promise<string | null> {
 
     if (!segments?.length) {
       log.warn("transcript", `No transcript segments for ${videoId}`);
-      return null;
+    } else {
+      const text = segments
+        .map((seg: { text: string }) => seg.text)
+        .join(" ")
+        .replace(/\n/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (text) {
+        log.info("transcript", `Got transcript for ${videoId} (${text.length} chars, ${segments.length} segments)`);
+        return text;
+      }
+
+      log.warn("transcript", `Transcript segments were empty for ${videoId}`);
     }
-
-    const text = segments
-      .map((seg: { text: string }) => seg.text)
-      .join(" ")
-      .replace(/\n/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!text) return null;
-
-    log.info("transcript", `Got transcript for ${videoId} (${text.length} chars, ${segments.length} segments)`);
-    return text;
   } catch (err) {
-    log.warn("transcript", `No transcript for ${videoId}: ${err}`);
-    return null;
+    log.warn("transcript", `Caption transcript failed for ${videoId}: ${err}`);
   }
+
+  return fetchAudioTranscript(videoId);
 }
 
 /**

@@ -8,6 +8,7 @@ A personal Telegram bot that tracks favorite YouTube channels, detects new uploa
 - Poll active channels every 20 minutes through YouTube RSS.
 - Queue newly published videos.
 - Fetch English transcripts from YouTube captions.
+- Fall back to proxy-backed audio transcription with Groq when captions are missing.
 - Generate a structured summary with Anthropic.
 - Optionally grade the ideas with a separate OpenAI-compatible grader LLM.
 - Render the result in your preferred Telegram format.
@@ -32,12 +33,20 @@ BOT_MODE=auto
 DATABASE_URL=
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-6
+GROQ_API_KEY=
+GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
+GROQ_MAX_UPLOAD_MB=24
+TRANSCRIPT_AUDIO_FALLBACK=true
+YTDLP_PROXY_URL=
+YTDLP_BINARY_PATH=
 GRADER_LLM_BASE_URL=https://api.openai.com/v1
 GRADER_LLM_MODEL=
 GRADER_LLM_API_KEY=
 ```
 
 The grader LLM fields are optional. Leave them blank to use the main summarizer's grading. Fill them when you want the "Unbiased grading" section to be produced by a separate model. Do not commit a real API key.
+
+The Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`.
 
 3. Install dependencies:
 

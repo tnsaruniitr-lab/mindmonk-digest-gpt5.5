@@ -19,6 +19,16 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),
   ANTHROPIC_MODEL: z.string().optional().default("claude-sonnet-4-6"),
+  GROQ_API_KEY: z.string().optional().default(""),
+  GROQ_TRANSCRIPTION_MODEL: z.string().optional().default("whisper-large-v3-turbo"),
+  GROQ_MAX_UPLOAD_MB: z.coerce.number().min(1).max(100).optional().default(24),
+  TRANSCRIPT_AUDIO_FALLBACK: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((value) => value.toLowerCase() !== "false"),
+  YTDLP_PROXY_URL: optionalHttpUrl,
+  YTDLP_BINARY_PATH: z.string().optional().default(""),
   GRADER_LLM_BASE_URL: optionalHttpUrl.default("https://api.openai.com/v1"),
   GRADER_LLM_MODEL: z.string().optional().default(""),
   GRADER_LLM_API_KEY: z.string().optional().default(""),
