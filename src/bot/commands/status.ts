@@ -45,7 +45,7 @@ export async function statusCommand(ctx: Context) {
 
   if (recent?.length) {
     msg += `\n*Recent:*\n`;
-    recent.forEach((v) => {
+    recent.forEach((v: { title: string }) => {
       msg += `• ${v.title}\n`;
     });
   }

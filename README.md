@@ -26,8 +26,10 @@ cp .env.example .env
 ```bash
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
-SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
+TELEGRAM_WEBHOOK_URL=
+TELEGRAM_WEBHOOK_SECRET=
+BOT_MODE=auto
+DATABASE_URL=
 ANTHROPIC_API_KEY=
 GRADER_LLM_BASE_URL=https://api.openai.com/v1
 GRADER_LLM_MODEL=
@@ -59,6 +61,8 @@ npm run dev
 Railway's public URL expects an HTTP listener, so the app starts a small health server on `process.env.PORT`.
 
 - `/` and `/health` return a JSON health response.
+- In Railway, set `DATABASE_URL` from the attached Postgres service.
+- Set `BOT_MODE=webhook` and `TELEGRAM_WEBHOOK_URL=https://<your-railway-domain>/telegram/<secret>` to avoid Telegram long-polling conflicts.
 - The real product interface is still Telegram.
 - Set all required environment variables in Railway before deploying.
 - Railway should run `npm run build` and then `npm start`, which starts the compiled app from `dist/index.js`.

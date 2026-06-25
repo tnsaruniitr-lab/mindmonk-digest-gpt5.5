@@ -1,6 +1,16 @@
 import http from "node:http";
 import { log } from "./utils/logger.js";
 
+type WebhookHandler = (
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+) => void | Promise<void>;
+
+interface HealthServerOptions {
+  webhookPath?: string;
+  webhookHandler?: WebhookHandler;
+}
+
 interface HealthStatus {
   service: string;
   status: "ok";
@@ -17,18 +27,43 @@ function buildHealthStatus(): HealthStatus {
   };
 }
 
-export function startHealthServer(): http.Server {
+export function startHealthServer(options: HealthServerOptions = {}): http.Server {
   const port = Number(process.env.PORT ?? 3000);
   const host = "0.0.0.0";
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+
+    if (
+      options.webhookPath &&
+      options.webhookHandler &&
+      path === options.webhookPath
+    ) {
+      if (req.method !== "POST") {
+        res.writeHead(405, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "method_not_allowed" }));
+        return;
+      }
+
+      try {
+        await options.webhookHandler(req, res);
+      } catch (err) {
+        log.error("health", "Telegram webhook handler failed", err);
+        if (!res.headersSent) {
+          res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "webhook_failed" }));
+        }
+      }
+      return;
+    }
+
     if (req.method !== "GET") {
       res.writeHead(405, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "method_not_allowed" }));
       return;
     }
 
-    if (req.url !== "/" && req.url !== "/health") {
+    if (path !== "/" && path !== "/health") {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "not_found" }));
       return;

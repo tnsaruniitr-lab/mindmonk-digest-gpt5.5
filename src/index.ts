@@ -1,4 +1,5 @@
 import { Telegraf } from "telegraf";
+import type http from "node:http";
 import { config } from "./config.js";
 import { log } from "./utils/logger.js";
 import { startCommand } from "./bot/commands/start.js";
@@ -17,10 +18,22 @@ import { smartHandler } from "./bot/handlers/smart-handler.js";
 import { startScheduler, stopScheduler } from "./scheduler/cron.js";
 import { setBot } from "./services/delivery.js";
 import { startHealthServer } from "./health-server.js";
+import { ensureDatabaseSchema } from "./db/supabase.js";
 
 const bot = new Telegraf(config.TELEGRAM_BOT_TOKEN);
 setBot(bot);
-const healthServer = startHealthServer();
+const webhookPath = buildWebhookPath();
+const webhookUrl = buildWebhookUrl(webhookPath);
+const shouldUseWebhook =
+  config.BOT_MODE === "webhook" || (config.BOT_MODE === "auto" && Boolean(webhookUrl));
+const healthServer = startHealthServer(
+  shouldUseWebhook
+    ? {
+        webhookPath,
+        webhookHandler: bot.webhookCallback(webhookPath),
+      }
+    : {}
+);
 
 // --- Commands ---
 bot.start(startCommand);
@@ -43,20 +56,57 @@ bot.action(/^addch:/, addChannelCallback);
 bot.on("text", smartHandler);
 
 // --- Launch ---
-bot.launch(() => {
-  log.info("bot", "Bot started (long polling mode)");
+startBot().catch((err) => {
+  log.error("bot", "Failed to start bot", err);
+  shutdown(healthServer, "STARTUP_FAILURE");
+  process.exit(1);
 });
-
-startScheduler();
 
 // Graceful shutdown
-process.once("SIGINT", () => {
+process.once("SIGINT", () => shutdown(healthServer, "SIGINT"));
+process.once("SIGTERM", () => shutdown(healthServer, "SIGTERM"));
+
+function buildWebhookPath(): string {
+  const secret =
+    config.TELEGRAM_WEBHOOK_SECRET ||
+    config.TELEGRAM_BOT_TOKEN.replace(/[^a-zA-Z0-9_-]/g, "").slice(-32);
+  return `/telegram/${secret}`;
+}
+
+function buildWebhookUrl(path: string): string {
+  if (config.TELEGRAM_WEBHOOK_URL) return config.TELEGRAM_WEBHOOK_URL;
+
+  const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (!publicDomain) return "";
+
+  const origin = publicDomain.startsWith("http")
+    ? publicDomain
+    : `https://${publicDomain}`;
+  return `${origin.replace(/\/$/, "")}${path}`;
+}
+
+async function startBot(): Promise<void> {
+  await ensureDatabaseSchema();
+  log.info("db", "Database schema ready");
+
+  if (shouldUseWebhook) {
+    if (!webhookUrl) {
+      throw new Error("BOT_MODE=webhook requires TELEGRAM_WEBHOOK_URL or RAILWAY_PUBLIC_DOMAIN");
+    }
+
+    await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
+    log.info("bot", "Bot started (webhook mode)");
+  } else {
+    await bot.launch();
+    log.info("bot", "Bot started (long polling mode)");
+  }
+
+  startScheduler();
+}
+
+function shutdown(healthServer: http.Server, signal: string): void {
   stopScheduler();
   healthServer.close();
-  try { bot.stop("SIGINT"); } catch {}
-});
-process.once("SIGTERM", () => {
-  stopScheduler();
-  healthServer.close();
-  try { bot.stop("SIGTERM"); } catch {}
-});
+  try { bot.stop(signal); } catch {}
+  log.info("bot", `Shutdown complete (${signal})`);
+}

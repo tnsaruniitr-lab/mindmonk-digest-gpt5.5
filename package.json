@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@supabase/supabase-js": "^2.49.0",
     "dotenv": "^16.4.0",
     "node-cron": "^3.0.0",
+    "pg": "^8.22.0",
     "rss-parser": "^3.13.0",
     "telegraf": "^4.16.0",
     "youtube-captions-scraper": "^2.0.3",
@@ -25,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }

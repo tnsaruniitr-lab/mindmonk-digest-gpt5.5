@@ -25,6 +25,6 @@ export async function removeChannelCommand(ctx: Context) {
     return;
   }
 
-  const names = data.map((c) => c.name).join(", ");
+  const names = data.map((c: { name: string }) => c.name).join(", ");
   await ctx.reply(`✅ Stopped tracking: ${names}`);
 }

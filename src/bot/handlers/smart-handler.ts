@@ -287,7 +287,7 @@ async function handleListChannels(ctx: Context): Promise<void> {
   }
 
   let msg = "📺 Tracked channels:\n\n";
-  channels.forEach((ch, i) => {
+  channels.forEach((ch: { name: string; default_category: string | null }, i: number) => {
     const cat = ch.default_category?.replace("_", " ") ?? "auto";
     msg += `${i + 1}. ${ch.name} (${cat})\n`;
   });
@@ -308,6 +308,6 @@ async function handleRemoveChannel(ctx: Context, name: string): Promise<void> {
     return;
   }
 
-  const names = data.map((c) => c.name).join(", ");
+  const names = data.map((c: { name: string }) => c.name).join(", ");
   await ctx.reply(`Stopped tracking: ${names}`);
 }
