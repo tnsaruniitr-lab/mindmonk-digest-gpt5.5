@@ -109,7 +109,11 @@ export async function summarizeVideoById(
       return;
     }
 
-    await ctx.reply(`♻️ "${video.title}" was marked processed, but the summary is missing. Reprocessing now...`);
+    if (video.transcript_status === "unavailable") {
+      await ctx.reply(`♻️ I previously could not find captions for "${video.title}". Checking again now...`);
+    } else {
+      await ctx.reply(`♻️ "${video.title}" was marked processed, but the summary is missing. Reprocessing now...`);
+    }
   } else {
     await ctx.reply(`⏳ Processing "${video.title}"...`);
   }

@@ -48,6 +48,7 @@ export async function processVideo(
   // 1. Fetch transcript
   const transcript = await getTranscriptForVideo(video.youtube_video_id, video.id);
   if (!transcript) {
+    await supabase.from("videos").update({ processed: true }).eq("id", video.id);
     if (shouldNotifyOnFailure) {
       await notify(`⚠️ No captions available for "${video.title}" from ${channelName}`);
     }
