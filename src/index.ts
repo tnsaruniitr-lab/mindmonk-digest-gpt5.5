@@ -16,9 +16,11 @@ import { pickChannelCallback, addChannelCallback } from "./bot/handlers/url-dete
 import { smartHandler } from "./bot/handlers/smart-handler.js";
 import { startScheduler, stopScheduler } from "./scheduler/cron.js";
 import { setBot } from "./services/delivery.js";
+import { startHealthServer } from "./health-server.js";
 
 const bot = new Telegraf(config.TELEGRAM_BOT_TOKEN);
 setBot(bot);
+const healthServer = startHealthServer();
 
 // --- Commands ---
 bot.start(startCommand);
@@ -50,9 +52,11 @@ startScheduler();
 // Graceful shutdown
 process.once("SIGINT", () => {
   stopScheduler();
+  healthServer.close();
   try { bot.stop("SIGINT"); } catch {}
 });
 process.once("SIGTERM", () => {
   stopScheduler();
+  healthServer.close();
   try { bot.stop("SIGTERM"); } catch {}
 });
