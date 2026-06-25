@@ -2,6 +2,10 @@ import { z } from "zod";
 import dotenv from "dotenv";
 dotenv.config({ override: true });
 
+process.env.AUDIO_CHUNK_SECONDS ??= process.env.GROQ_AUDIO_CHUNK_SECONDS;
+process.env.AUDIO_MAX_RATE_LIMIT_WAIT_SECONDS ??= process.env.GROQ_MAX_RATE_LIMIT_WAIT_SECONDS;
+process.env.AUDIO_MAX_UPLOAD_MB ??= process.env.GROQ_MAX_UPLOAD_MB;
+
 const optionalHttpUrl = z
   .string()
   .optional()
@@ -19,8 +23,14 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),
   ANTHROPIC_MODEL: z.string().optional().default("claude-sonnet-4-6"),
+  OPENAI_API_KEY: z.string().optional().default(""),
+  OPENAI_TRANSCRIPTION_MODEL: z.string().optional().default("whisper-1"),
   GROQ_API_KEY: z.string().optional().default(""),
   GROQ_TRANSCRIPTION_MODEL: z.string().optional().default("whisper-large-v3-turbo"),
+  AUDIO_TRANSCRIPTION_PROVIDERS: z.string().optional().default(""),
+  AUDIO_CHUNK_SECONDS: z.coerce.number().min(60).max(1800).optional().default(180),
+  AUDIO_MAX_RATE_LIMIT_WAIT_SECONDS: z.coerce.number().min(30).max(1800).optional().default(600),
+  AUDIO_MAX_UPLOAD_MB: z.coerce.number().min(1).max(100).optional().default(24),
   GROQ_AUDIO_CHUNK_SECONDS: z.coerce.number().min(60).max(1800).optional().default(180),
   GROQ_MAX_RATE_LIMIT_WAIT_SECONDS: z.coerce.number().min(30).max(1800).optional().default(600),
   GROQ_MAX_UPLOAD_MB: z.coerce.number().min(1).max(100).optional().default(24),

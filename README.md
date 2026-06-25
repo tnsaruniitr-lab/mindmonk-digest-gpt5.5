@@ -8,7 +8,7 @@ A personal Telegram bot that tracks favorite YouTube channels, detects new uploa
 - Poll active channels every 20 minutes through YouTube RSS.
 - Queue newly published videos.
 - Fetch English transcripts from YouTube captions.
-- Fall back to proxy-backed audio transcription with Groq when captions are missing.
+- Fall back to proxy-backed audio transcription with OpenAI Whisper/Groq when captions are missing.
 - Generate a structured summary with Anthropic.
 - Optionally grade the ideas with a separate OpenAI-compatible grader LLM.
 - Render the result in your preferred Telegram format.
@@ -33,6 +33,12 @@ BOT_MODE=auto
 DATABASE_URL=
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-6
+OPENAI_API_KEY=
+OPENAI_TRANSCRIPTION_MODEL=whisper-1
+AUDIO_TRANSCRIPTION_PROVIDERS=openai,groq
+AUDIO_CHUNK_SECONDS=180
+AUDIO_MAX_RATE_LIMIT_WAIT_SECONDS=600
+AUDIO_MAX_UPLOAD_MB=24
 GROQ_API_KEY=
 GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
 GROQ_AUDIO_CHUNK_SECONDS=180
@@ -48,7 +54,7 @@ GRADER_LLM_API_KEY=
 
 The grader LLM fields are optional. Leave them blank to use the main summarizer's grading. Fill them when you want the "Unbiased grading" section to be produced by a separate model. Do not commit a real API key.
 
-The Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`. Audio is chunked before upload so Groq rate limits can be retried chunk by chunk.
+The OpenAI/Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `AUDIO_TRANSCRIPTION_PROVIDERS` is a comma-separated order such as `openai,groq`; use `openai` alone if you want to avoid Groq entirely. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`. Audio is chunked before upload so provider rate limits can be retried chunk by chunk.
 
 3. Install dependencies:
 

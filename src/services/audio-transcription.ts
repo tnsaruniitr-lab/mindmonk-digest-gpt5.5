@@ -12,7 +12,10 @@ const execFileAsync = promisify(execFile);
 const MAX_YTDLP_DOWNLOAD_MS = 8 * 60 * 1000;
 const MAX_FFMPEG_MS = 10 * 60 * 1000;
 const GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
 const YTDLP_LATEST_RELEASE_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
+
+type TranscriptionProvider = "openai" | "groq";
 
 interface AudioFile {
   path: string;
@@ -26,7 +29,7 @@ function redactSecrets(text: string): string {
 }
 
 function maxUploadBytes(): number {
-  return Math.floor(config.GROQ_MAX_UPLOAD_MB * 1024 * 1024);
+  return Math.floor(config.AUDIO_MAX_UPLOAD_MB * 1024 * 1024);
 }
 
 function mimeTypeFor(filePath: string): string {
@@ -194,7 +197,7 @@ async function splitAudioIfNeeded(audio: AudioFile, workDir: string): Promise<Au
       "-f",
       "segment",
       "-segment_time",
-      config.GROQ_AUDIO_CHUNK_SECONDS.toString(),
+      config.AUDIO_CHUNK_SECONDS.toString(),
       "-reset_timestamps",
       "1",
       chunkPattern,
@@ -214,9 +217,51 @@ async function splitAudioIfNeeded(audio: AudioFile, workDir: string): Promise<Au
 
   log.info(
     "transcript",
-    `Split fallback audio into ${chunks.length} chunk(s) for Groq (${config.GROQ_AUDIO_CHUNK_SECONDS}s each)`
+    `Split fallback audio into ${chunks.length} chunk(s) (${config.AUDIO_CHUNK_SECONDS}s each)`
   );
   return chunks;
+}
+
+function configuredProviders(): TranscriptionProvider[] {
+  const raw = config.AUDIO_TRANSCRIPTION_PROVIDERS.trim();
+  const candidates = raw
+    ? raw.split(",")
+    : config.OPENAI_API_KEY
+      ? ["openai", "groq"]
+      : ["groq", "openai"];
+  const providers: TranscriptionProvider[] = [];
+
+  for (const candidate of candidates) {
+    const provider = candidate.trim().toLowerCase();
+    if ((provider === "openai" || provider === "groq") && !providers.includes(provider)) {
+      providers.push(provider);
+    }
+  }
+
+  return providers;
+}
+
+function providerConfig(provider: TranscriptionProvider): {
+  apiKey: string;
+  model: string;
+  name: string;
+  url: string;
+} {
+  if (provider === "openai") {
+    return {
+      apiKey: config.OPENAI_API_KEY,
+      model: config.OPENAI_TRANSCRIPTION_MODEL,
+      name: "OpenAI",
+      url: OPENAI_TRANSCRIPTION_URL,
+    };
+  }
+
+  return {
+    apiKey: config.GROQ_API_KEY,
+    model: config.GROQ_TRANSCRIPTION_MODEL,
+    name: "Groq",
+    url: GROQ_TRANSCRIPTION_URL,
+  };
 }
 
 function parseRetryDelayMs(response: Response, body: string): number | null {
@@ -240,8 +285,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function transcribeAudioFile(file: AudioFile, index: number, total: number): Promise<string> {
-  if (!config.GROQ_API_KEY) throw new Error("GROQ_API_KEY is required for audio fallback");
+async function transcribeAudioFile(
+  provider: TranscriptionProvider,
+  file: AudioFile,
+  index: number,
+  total: number
+): Promise<string> {
+  const providerSettings = providerConfig(provider);
+  if (!providerSettings.apiKey) throw new Error(`${providerSettings.name} API key is required for audio fallback`);
 
   const bytes = await readFile(file.path);
   const makeForm = () => {
@@ -249,7 +300,7 @@ async function transcribeAudioFile(file: AudioFile, index: number, total: number
     const form = new FormData();
 
     form.append("file", blob, path.basename(file.path));
-    form.append("model", config.GROQ_TRANSCRIPTION_MODEL);
+    form.append("model", providerSettings.model);
     form.append("response_format", "json");
     form.append("temperature", "0");
     form.append("language", "en");
@@ -262,10 +313,10 @@ async function transcribeAudioFile(file: AudioFile, index: number, total: number
   };
 
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+    const response = await fetch(providerSettings.url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.GROQ_API_KEY}`,
+          Authorization: `Bearer ${providerSettings.apiKey}`,
         },
         body: makeForm(),
     });
@@ -273,9 +324,9 @@ async function transcribeAudioFile(file: AudioFile, index: number, total: number
     if (response.ok) {
       const json = (await response.json()) as { text?: string };
       const text = json.text?.trim() ?? "";
-      if (!text) throw new Error("Groq returned an empty transcription");
+      if (!text) throw new Error(`${providerSettings.name} returned an empty transcription`);
 
-      log.info("transcript", `Groq transcribed chunk ${index + 1}/${total} (${text.length} chars)`);
+      log.info("transcript", `${providerSettings.name} transcribed chunk ${index + 1}/${total} (${text.length} chars)`);
       return text;
     }
 
@@ -284,28 +335,37 @@ async function transcribeAudioFile(file: AudioFile, index: number, total: number
       const retryDelayMs = parseRetryDelayMs(response, body);
       const cappedDelayMs = Math.min(
         retryDelayMs ?? 60_000,
-        config.GROQ_MAX_RATE_LIMIT_WAIT_SECONDS * 1000
+        config.AUDIO_MAX_RATE_LIMIT_WAIT_SECONDS * 1000
       );
       log.warn(
         "transcript",
-        `Groq rate limit on chunk ${index + 1}/${total}; retrying in ${Math.round(cappedDelayMs / 1000)}s`
+        `${providerSettings.name} rate limit on chunk ${index + 1}/${total}; retrying in ${Math.round(cappedDelayMs / 1000)}s`
       );
       await delay(cappedDelayMs + 5000);
       continue;
     }
 
-    throw new Error(`Groq transcription failed (${response.status}): ${redactSecrets(body)}`);
+    throw new Error(`${providerSettings.name} transcription failed (${response.status}): ${redactSecrets(body)}`);
   }
 
-  throw new Error("Groq transcription retry loop exhausted");
+  throw new Error(`${providerSettings.name} transcription retry loop exhausted`);
+}
+
+async function transcribeChunksWithProvider(
+  provider: TranscriptionProvider,
+  chunks: AudioFile[]
+): Promise<string> {
+  const parts: string[] = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    parts.push(await transcribeAudioFile(provider, chunks[i], i, chunks.length));
+  }
+
+  return parts.join("\n\n").replace(/\s+/g, " ").trim();
 }
 
 export async function fetchAudioTranscript(videoId: string): Promise<string | null> {
   if (!config.TRANSCRIPT_AUDIO_FALLBACK) return null;
-  if (!config.GROQ_API_KEY) {
-    log.warn("transcript", "Audio fallback skipped: GROQ_API_KEY is not set");
-    return null;
-  }
   if (!config.YTDLP_PROXY_URL) {
     log.warn("transcript", "Audio fallback skipped: YTDLP_PROXY_URL is not set");
     return null;
@@ -317,17 +377,33 @@ export async function fetchAudioTranscript(videoId: string): Promise<string | nu
   try {
     const audio = await downloadAudio(videoId, workDir);
     const chunks = await splitAudioIfNeeded(audio, workDir);
-    const parts: string[] = [];
+    const providers = configuredProviders();
+    let attemptedProvider = false;
 
-    for (let i = 0; i < chunks.length; i++) {
-      parts.push(await transcribeAudioFile(chunks[i], i, chunks.length));
+    for (const provider of providers) {
+      const providerSettings = providerConfig(provider);
+      if (!providerSettings.apiKey) {
+        log.warn("transcript", `Audio fallback skipping ${providerSettings.name}: API key is not set`);
+        continue;
+      }
+
+      attemptedProvider = true;
+      try {
+        log.info("transcript", `Audio fallback transcribing ${videoId} with ${providerSettings.name}`);
+        const transcript = await transcribeChunksWithProvider(provider, chunks);
+        if (!transcript) throw new Error(`${providerSettings.name} returned an empty transcript`);
+
+        log.info("transcript", `Got audio transcript for ${videoId} via ${providerSettings.name} (${transcript.length} chars)`);
+        return transcript;
+      } catch (err) {
+        log.warn("transcript", `${providerSettings.name} audio transcription failed for ${videoId}: ${redactSecrets(String(err))}`);
+      }
     }
 
-    const transcript = parts.join("\n\n").replace(/\s+/g, " ").trim();
-    if (!transcript) return null;
-
-    log.info("transcript", `Got audio transcript for ${videoId} (${transcript.length} chars)`);
-    return transcript;
+    if (!attemptedProvider) {
+      log.warn("transcript", "Audio fallback skipped: no configured transcription provider has an API key");
+    }
+    return null;
   } catch (err) {
     log.warn("transcript", `Audio fallback failed for ${videoId}: ${redactSecrets(String(err))}`);
     return null;
