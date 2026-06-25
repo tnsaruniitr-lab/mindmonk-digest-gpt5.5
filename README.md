@@ -54,6 +54,15 @@ For development with reloads:
 npm run dev
 ```
 
+## Railway Deployment
+
+Railway's public URL expects an HTTP listener, so the app starts a small health server on `process.env.PORT`.
+
+- `/` and `/health` return a JSON health response.
+- The real product interface is still Telegram.
+- Set all required environment variables in Railway before deploying.
+- Railway should run `npm run build` and then `npm start`, which starts the compiled app from `dist/index.js`.
+
 ## Telegram Commands
 
 - `/start` - bind the bot to your Telegram chat.
