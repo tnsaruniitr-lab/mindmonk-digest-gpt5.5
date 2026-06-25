@@ -26,6 +26,7 @@ const webhookPath = buildWebhookPath();
 const webhookUrl = buildWebhookUrl(webhookPath);
 const shouldUseWebhook =
   config.BOT_MODE === "webhook" || (config.BOT_MODE === "auto" && Boolean(webhookUrl));
+let shuttingDown = false;
 const healthServer = startHealthServer(
   shouldUseWebhook
     ? {
@@ -66,6 +67,18 @@ startBot().catch((err) => {
 process.once("SIGINT", () => shutdown(healthServer, "SIGINT"));
 process.once("SIGTERM", () => shutdown(healthServer, "SIGTERM"));
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTelegramConflict(err: unknown): boolean {
+  const maybeError = err as {
+    code?: number;
+    response?: { error_code?: number };
+  };
+  return maybeError.code === 409 || maybeError.response?.error_code === 409;
+}
+
 function buildWebhookPath(): string {
   const secret =
     config.TELEGRAM_WEBHOOK_SECRET ||
@@ -97,14 +110,42 @@ async function startBot(): Promise<void> {
     await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
     log.info("bot", "Bot started (webhook mode)");
   } else {
-    await bot.launch();
-    log.info("bot", "Bot started (long polling mode)");
+    startPollingWithRetry();
   }
 
   startScheduler();
 }
 
+function startPollingWithRetry(): void {
+  void (async () => {
+    while (!shuttingDown) {
+      try {
+        await bot.launch({ dropPendingUpdates: true });
+
+        if (!shuttingDown) {
+          log.warn("bot", "Long polling stopped unexpectedly; retrying in 5s");
+          await delay(5000);
+        }
+      } catch (err) {
+        if (shuttingDown) return;
+
+        if (isTelegramConflict(err)) {
+          log.warn("bot", "Telegram polling conflict; retrying in 65s");
+          await delay(65000);
+          continue;
+        }
+
+        log.error("bot", "Long polling failed; retrying in 30s", err);
+        await delay(30000);
+      }
+    }
+  })();
+
+  log.info("bot", "Bot starting (long polling mode)");
+}
+
 function shutdown(healthServer: http.Server, signal: string): void {
+  shuttingDown = true;
   stopScheduler();
   healthServer.close();
   try { bot.stop(signal); } catch {}
