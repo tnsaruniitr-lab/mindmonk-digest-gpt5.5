@@ -28,14 +28,25 @@ import { log } from "../../utils/logger.js";
  * Smart text handler — uses Claude to classify intent, then routes to the right action.
  */
 export async function smartHandler(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
-
   const text =
     (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
 
   // Skip commands — let Telegraf handle those
   if (text.startsWith("/")) return;
   if (!text.trim()) return;
+
+  const chatId = String(ctx.chat?.id ?? "");
+  if (!ownerChatId) {
+    await ctx.reply("Send /start first so I can bind this bot to your chat.");
+    return;
+  }
+
+  if (chatId !== ownerChatId) {
+    await ctx.reply("This is a personal bot. Access denied.");
+    return;
+  }
+
+  log.info("handler", `Text received: ${text.slice(0, 80)}`);
 
   // Fast path: if it's clearly a YouTube URL, skip the Claude call
   const videoId = extractVideoId(text);
@@ -50,6 +61,11 @@ export async function smartHandler(ctx: Context) {
       await handleChannelUrl(ctx, urlMatch[0]);
       return;
     }
+
+    await ctx.reply(
+      "I saw a YouTube URL, but I could not recognize it as a video or channel link. Try a standard youtube.com/watch, youtu.be, shorts, live, /channel, or /@handle URL."
+    );
+    return;
   }
 
   // Use Claude to classify intent
