@@ -1,4 +1,5 @@
 import http from "node:http";
+import { renderLandingPage } from "./landing-page.js";
 import { log } from "./utils/logger.js";
 
 type WebhookHandler = (
@@ -57,20 +58,31 @@ export function startHealthServer(options: HealthServerOptions = {}): http.Serve
       return;
     }
 
-    if (req.method !== "GET") {
+    if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "method_not_allowed" }));
       return;
     }
 
-    if (path !== "/" && path !== "/health") {
+    if (path === "/") {
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      });
+      if (req.method !== "HEAD") res.end(renderLandingPage());
+      else res.end();
+      return;
+    }
+
+    if (path !== "/health") {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "not_found" }));
       return;
     }
 
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(buildHealthStatus()));
+    if (req.method !== "HEAD") res.end(JSON.stringify(buildHealthStatus()));
+    else res.end();
   });
 
   server.listen(port, host, () => {
