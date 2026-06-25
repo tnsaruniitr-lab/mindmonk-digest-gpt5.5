@@ -1,6 +1,6 @@
 import { Telegraf } from "telegraf";
 import type http from "node:http";
-import { config } from "./config.js";
+import { config, ownerChatId, setOwnerChatId } from "./config.js";
 import { log } from "./utils/logger.js";
 import { startCommand } from "./bot/commands/start.js";
 import { helpCommand } from "./bot/commands/help.js";
@@ -18,7 +18,9 @@ import { smartHandler } from "./bot/handlers/smart-handler.js";
 import { startScheduler, stopScheduler } from "./scheduler/cron.js";
 import { setBot } from "./services/delivery.js";
 import { startHealthServer } from "./health-server.js";
-import { ensureDatabaseSchema } from "./db/supabase.js";
+import { ensureDatabaseSchema, supabase } from "./db/supabase.js";
+
+const OWNER_CHAT_ID_LABEL = "telegram_owner_chat_id";
 
 const bot = new Telegraf(config.TELEGRAM_BOT_TOKEN);
 setBot(bot);
@@ -101,6 +103,7 @@ function buildWebhookUrl(path: string): string {
 async function startBot(): Promise<void> {
   await ensureDatabaseSchema();
   log.info("db", "Database schema ready");
+  await loadPersistedOwnerChatId();
 
   if (shouldUseWebhook) {
     if (!webhookUrl) {
@@ -114,6 +117,21 @@ async function startBot(): Promise<void> {
   }
 
   startScheduler();
+}
+
+async function loadPersistedOwnerChatId(): Promise<void> {
+  if (ownerChatId) return;
+
+  const { data } = await supabase
+    .from("user_context")
+    .select("context")
+    .eq("label", OWNER_CHAT_ID_LABEL)
+    .single();
+
+  if (data?.context) {
+    setOwnerChatId(data.context);
+    log.info("bot", "Loaded persisted Telegram owner chat");
+  }
 }
 
 function startPollingWithRetry(): void {

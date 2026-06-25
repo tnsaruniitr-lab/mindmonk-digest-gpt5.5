@@ -47,7 +47,8 @@ export async function classifyVideo(
 
     const text =
       response.content[0].type === "text" ? response.content[0].text : "";
-    const parsed = ClassificationResponseSchema.safeParse(JSON.parse(text));
+    const jsonStr = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = ClassificationResponseSchema.safeParse(JSON.parse(jsonStr));
 
     if (parsed.success) {
       log.info("classifier", `"${videoTitle}" → ${parsed.data.category} (${parsed.data.reasoning})`);

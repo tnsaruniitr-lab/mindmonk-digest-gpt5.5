@@ -26,6 +26,11 @@ export async function deliverSummary(
     return false;
   }
 
+  if (!ownerChatId) {
+    log.warn("delivery", `No Telegram owner chat bound; skipping delivery for "${video.title}"`);
+    return false;
+  }
+
   try {
     const outputFormat = await getOutputFormat();
     const messages = formatSummary(video, summary, channelName, brainObjectCount, outputFormat);
@@ -69,6 +74,10 @@ export async function deliverSummary(
  */
 export async function notify(message: string): Promise<void> {
   if (!botInstance) return;
+  if (!ownerChatId) {
+    log.warn("delivery", "No Telegram owner chat bound; skipping notification");
+    return;
+  }
   try {
     await botInstance.telegram.sendMessage(ownerChatId, message);
   } catch (err) {

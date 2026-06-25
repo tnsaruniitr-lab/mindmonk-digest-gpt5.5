@@ -1,5 +1,8 @@
 import type { Context } from "telegraf";
 import { ownerChatId, setOwnerChatId } from "../../config.js";
+import { supabase } from "../../db/supabase.js";
+
+const OWNER_CHAT_ID_LABEL = "telegram_owner_chat_id";
 
 export async function startCommand(ctx: Context) {
   const chatId = String(ctx.chat?.id);
@@ -7,6 +10,14 @@ export async function startCommand(ctx: Context) {
   // First user to /start becomes the owner
   if (!ownerChatId) {
     setOwnerChatId(chatId);
+    await supabase.from("user_context").upsert(
+      {
+        label: OWNER_CHAT_ID_LABEL,
+        context: chatId,
+        active: false,
+      },
+      { onConflict: "label" }
+    );
   }
 
   if (chatId !== ownerChatId) {
