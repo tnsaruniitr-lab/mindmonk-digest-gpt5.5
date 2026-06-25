@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type QueryResultRow } from "pg";
 import { config } from "../config.js";
 
 type QueryOperation = "select" | "insert" | "update" | "delete" | "upsert";
@@ -56,6 +56,7 @@ const allowedTables = new Set([
   "brain_objects",
   "user_context",
   "delivery_log",
+  "jobs",
 ]);
 
 function asPgError(err: unknown): SupabaseLikeError {
@@ -442,6 +443,13 @@ export const supabase = {
   },
 };
 
+export async function dbQuery<T extends QueryResultRow = QueryResultRow>(
+  sql: string,
+  params: unknown[] = []
+) {
+  return pool.query<T>(sql, params);
+}
+
 export async function ensureDatabaseSchema(): Promise<void> {
   await pool.query(`
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -591,6 +599,23 @@ export async function ensureDatabaseSchema(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS jobs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      type text NOT NULL,
+      status text NOT NULL DEFAULT 'queued',
+      priority integer NOT NULL DEFAULT 100,
+      run_after timestamptz NOT NULL DEFAULT now(),
+      locked_by text,
+      locked_until timestamptz,
+      attempts integer NOT NULL DEFAULT 0,
+      max_attempts integer NOT NULL DEFAULT 5,
+      payload jsonb NOT NULL,
+      idempotency_key text UNIQUE,
+      last_error text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
     CREATE INDEX IF NOT EXISTS idx_users_telegram_chat_id ON users(telegram_chat_id);
     CREATE INDEX IF NOT EXISTS idx_user_channel_subscriptions_user_id ON user_channel_subscriptions(user_id);
@@ -603,5 +628,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_summaries_video_id ON summaries(video_id);
     CREATE INDEX IF NOT EXISTS idx_brain_objects_type ON brain_objects(type);
     CREATE INDEX IF NOT EXISTS idx_brain_objects_source_video_id ON brain_objects(source_video_id);
+    CREATE INDEX IF NOT EXISTS idx_jobs_status_run_after ON jobs(status, run_after, priority);
+    CREATE INDEX IF NOT EXISTS idx_jobs_locked_until ON jobs(locked_until);
+    CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(type);
   `);
 }

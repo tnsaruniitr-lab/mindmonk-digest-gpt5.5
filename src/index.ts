@@ -18,6 +18,7 @@ import { reprocessCommand } from "./bot/commands/reprocess.js";
 import { pickChannelCallback, addChannelCallback } from "./bot/handlers/url-detect.js";
 import { smartHandler } from "./bot/handlers/smart-handler.js";
 import { startScheduler, stopScheduler } from "./scheduler/cron.js";
+import { startJobWorker, stopJobWorker } from "./jobs/worker.js";
 import { setBot } from "./services/delivery.js";
 import { startHealthServer } from "./health-server.js";
 import { ensureDatabaseSchema, supabase } from "./db/supabase.js";
@@ -122,6 +123,7 @@ async function startBot(): Promise<void> {
   }
 
   startScheduler();
+  startJobWorker();
 }
 
 async function loadPersistedOwnerChatId(): Promise<void> {
@@ -174,6 +176,7 @@ function startPollingWithRetry(): void {
 function shutdown(healthServer: http.Server, signal: string): void {
   shuttingDown = true;
   stopScheduler();
+  stopJobWorker();
   healthServer.close();
   try { bot.stop(signal); } catch {}
   log.info("bot", `Shutdown complete (${signal})`);

@@ -39,6 +39,11 @@ AUDIO_TRANSCRIPTION_PROVIDERS=openai,groq
 AUDIO_CHUNK_SECONDS=180
 AUDIO_MAX_RATE_LIMIT_WAIT_SECONDS=600
 AUDIO_MAX_UPLOAD_MB=24
+JOB_WORKER_ENABLED=true
+JOB_POLL_INTERVAL_SECONDS=10
+JOB_LOCK_SECONDS=900
+JOB_RETRY_BASE_SECONDS=60
+MAX_VIDEO_PROCESSING_CONCURRENCY=1
 GROQ_API_KEY=
 GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
 GROQ_AUDIO_CHUNK_SECONDS=180
@@ -55,6 +60,8 @@ GRADER_LLM_API_KEY=
 The grader LLM fields are optional. Leave them blank to use the main summarizer's grading. Fill them when you want the "Unbiased grading" section to be produced by a separate model. Do not commit a real API key.
 
 The OpenAI/Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `AUDIO_TRANSCRIPTION_PROVIDERS` is a comma-separated order such as `openai,groq`; use `openai` alone if you want to avoid Groq entirely. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`. Audio is chunked before upload so provider rate limits can be retried chunk by chunk.
+
+The job worker fields control the durable Postgres-backed queue. Keep `MAX_VIDEO_PROCESSING_CONCURRENCY=1` until the proxy, OpenAI, Anthropic, and Railway CPU limits have been measured under load.
 
 3. Install dependencies:
 
@@ -170,7 +177,7 @@ Reset to the default layout:
 ## Processing Flow
 
 ```text
-YouTube RSS -> videos table -> transcript fetch -> classification -> summary -> Telegram delivery
+YouTube RSS -> videos table -> jobs table -> transcript fetch -> classification -> summary -> Telegram delivery
 ```
 
-The scheduler polls RSS every 20 minutes and processes queued videos every 5 minutes.
+The scheduler polls RSS every 20 minutes and enqueues pending videos every 5 minutes. The worker claims jobs with Postgres row locks so retries and future multi-worker processing are safer.

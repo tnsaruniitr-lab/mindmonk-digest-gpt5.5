@@ -1,5 +1,6 @@
 import type { Context } from "telegraf";
 import { supabase } from "../../db/supabase.js";
+import { getJobCounts } from "../../jobs/queue.js";
 import { listUserChannels } from "../../services/subscriptions.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
 
@@ -26,6 +27,7 @@ export async function statusCommand(ctx: Context) {
     .select("*", { count: "exact", head: true });
 
   const channels = await listUserChannels(user.id);
+  const jobCounts = await getJobCounts();
 
   // Recent processed
   const { data: recent } = await supabase
@@ -41,6 +43,9 @@ export async function statusCommand(ctx: Context) {
   msg += `Pending in queue: ${pendingCount ?? 0}\n`;
   msg += `No captions: ${unavailableCount ?? 0}\n`;
   msg += `Brain objects: ${totalBrain ?? 0}\n`;
+  msg += `Jobs queued: ${jobCounts.queued ?? 0}\n`;
+  msg += `Jobs processing: ${jobCounts.processing ?? 0}\n`;
+  msg += `Jobs failed/dead: ${(jobCounts.failed ?? 0) + (jobCounts.dead ?? 0)}\n`;
 
   if (recent?.length) {
     msg += `\n*Recent:*\n`;

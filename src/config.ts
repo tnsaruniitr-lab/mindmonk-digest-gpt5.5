@@ -31,6 +31,15 @@ const envSchema = z.object({
   AUDIO_CHUNK_SECONDS: z.coerce.number().min(60).max(1800).optional().default(180),
   AUDIO_MAX_RATE_LIMIT_WAIT_SECONDS: z.coerce.number().min(30).max(1800).optional().default(600),
   AUDIO_MAX_UPLOAD_MB: z.coerce.number().min(1).max(100).optional().default(24),
+  JOB_WORKER_ENABLED: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((value) => value.toLowerCase() !== "false"),
+  JOB_POLL_INTERVAL_SECONDS: z.coerce.number().min(2).max(300).optional().default(10),
+  JOB_LOCK_SECONDS: z.coerce.number().min(30).max(3600).optional().default(900),
+  JOB_RETRY_BASE_SECONDS: z.coerce.number().min(10).max(3600).optional().default(60),
+  MAX_VIDEO_PROCESSING_CONCURRENCY: z.coerce.number().min(1).max(10).optional().default(1),
   GROQ_AUDIO_CHUNK_SECONDS: z.coerce.number().min(60).max(1800).optional().default(180),
   GROQ_MAX_RATE_LIMIT_WAIT_SECONDS: z.coerce.number().min(30).max(1800).optional().default(600),
   GROQ_MAX_UPLOAD_MB: z.coerce.number().min(1).max(100).optional().default(24),

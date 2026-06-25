@@ -7,6 +7,7 @@ import { generateSummary } from "../services/summarizer.js";
 import { extractBrainObjects } from "../services/brain-extractor.js";
 import { deliverSummary, deliverSummaryToChat, notify } from "../services/delivery.js";
 import { loadActiveSubscribers } from "../services/users.js";
+import { enqueueProcessVideoJob, getJobCounts } from "../jobs/queue.js";
 import type { Video, Channel, Summary } from "../types/index.js";
 import type { Category } from "../types/index.js";
 import { log } from "../utils/logger.js";
@@ -145,9 +146,9 @@ export async function processVideo(
 /**
  * Process the queue of unprocessed videos.
  */
-async function processQueue(): Promise<void> {
+async function enqueuePendingVideos(): Promise<void> {
   if (processing) {
-    log.warn("cron", "Queue processor already running, skipping");
+    log.warn("cron", "Queue enqueuer already running, skipping");
     return;
   }
 
@@ -159,22 +160,26 @@ async function processQueue(): Promise<void> {
       .select("*")
       .eq("processed", false)
       .order("created_at", { ascending: true })
-      .limit(3);
+      .limit(25);
 
     if (error || !videos?.length) {
       if (error) log.error("cron", "Failed to fetch queue", error);
       return;
     }
 
-    log.info("cron", `Processing ${videos.length} video(s) from queue`);
+    let enqueued = 0;
 
     for (const video of videos as Video[]) {
       try {
-        await processVideo(video);
+        const job = await enqueueProcessVideoJob(video.id);
+        if (job) enqueued++;
       } catch (err) {
-        log.error("cron", `Failed to process "${video.title}"`, err);
+        log.error("cron", `Failed to enqueue "${video.title}"`, err);
       }
     }
+
+    const counts = await getJobCounts();
+    log.info("cron", `Enqueued ${enqueued} video job(s). Jobs: ${JSON.stringify(counts)}`);
   } finally {
     processing = false;
   }
@@ -190,10 +195,15 @@ export function startScheduler(): void {
 
   // Process queue every 5 minutes
   queueJob = cron.schedule("*/5 * * * *", async () => {
-    await processQueue();
+    await enqueuePendingVideos();
   });
 
-  log.info("cron", "Scheduler started (RSS: every 20min, Queue: every 5min)");
+  // Prime the durable queue shortly after startup.
+  setTimeout(() => {
+    void enqueuePendingVideos();
+  }, 5000);
+
+  log.info("cron", "Scheduler started (RSS: every 20min, Queue enqueue: every 5min)");
 }
 
 export function stopScheduler(): void {
