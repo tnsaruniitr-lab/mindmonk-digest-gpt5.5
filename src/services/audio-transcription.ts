@@ -142,7 +142,7 @@ async function downloadAudio(videoId: string, workDir: string): Promise<AudioFil
     "--proxy",
     config.YTDLP_PROXY_URL,
     "-f",
-    "bestaudio[filesize<24M]/bestaudio[filesize_approx<24M]/worstaudio/bestaudio",
+    "139/worstaudio[ext=m4a]/worstaudio/bestaudio[filesize<24M]/bestaudio[filesize_approx<24M]/bestaudio",
     "-o",
     outputTemplate,
   ];
