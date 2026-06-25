@@ -1,0 +1,61 @@
+import type { Context } from "telegraf";
+import { ownerChatId } from "../../config.js";
+import { supabase } from "../../db/supabase.js";
+import { extractVideoId } from "../../utils/youtube-url.js";
+import { processVideo } from "../../scheduler/cron.js";
+import type { Video } from "../../types/index.js";
+
+export async function reprocessCommand(ctx: Context) {
+  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+
+  const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
+  const url = text.replace(/^\/reprocess\s*/, "").trim();
+
+  if (!url) {
+    await ctx.reply("Usage: /reprocess <youtube_video_url>");
+    return;
+  }
+
+  const videoId = extractVideoId(url);
+  if (!videoId) {
+    await ctx.reply("❌ Could not extract video ID from that URL.");
+    return;
+  }
+
+  const { data: video } = await supabase
+    .from("videos")
+    .select("*")
+    .eq("youtube_video_id", videoId)
+    .single();
+
+  if (!video) {
+    await ctx.reply("❌ Video not found in database. Use /digest to process it first.");
+    return;
+  }
+
+  await ctx.reply(`♻️ Reprocessing "${video.title}"...`);
+
+  // Delete existing summary and brain objects
+  await supabase.from("summaries").delete().eq("video_id", video.id);
+  await supabase.from("brain_objects").delete().eq("source_video_id", video.id);
+
+  // Reset video state
+  await supabase
+    .from("videos")
+    .update({ processed: false, transcript_status: "pending" })
+    .eq("id", video.id);
+
+  // Refetch the updated video
+  const { data: updatedVideo } = await supabase
+    .from("videos")
+    .select("*")
+    .eq("id", video.id)
+    .single();
+
+  try {
+    await processVideo(updatedVideo as Video);
+    await ctx.reply("✅ Reprocessing complete! New summary sent above.");
+  } catch (err) {
+    await ctx.reply(`❌ Reprocessing failed: ${err}`);
+  }
+}
