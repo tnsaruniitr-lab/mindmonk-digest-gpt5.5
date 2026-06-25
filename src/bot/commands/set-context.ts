@@ -1,9 +1,10 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
-import { supabase } from "../../db/supabase.js";
+import { setContextEntry } from "../../services/preferences.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 
 export async function setContextCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
   const args = text.replace(/^\/set_context\s*/, "").trim();
@@ -22,21 +23,10 @@ export async function setContextCommand(ctx: Context) {
   const label = args.slice(0, spaceIdx).trim();
   const context = args.slice(spaceIdx + 1).trim();
 
-  // Upsert by label
-  const { data: existing } = await supabase
-    .from("user_context")
-    .select("id")
-    .eq("label", label)
-    .single();
-
-  if (existing) {
-    await supabase
-      .from("user_context")
-      .update({ context, active: true })
-      .eq("id", existing.id);
-    await ctx.reply(`✅ Updated context "${label}"`);
-  } else {
-    await supabase.from("user_context").insert({ label, context, active: true });
-    await ctx.reply(`✅ Saved context "${label}"\n\nThis will be injected into all future summaries.`);
-  }
+  const saved = await setContextEntry(user.id, label, context);
+  await ctx.reply(
+    saved
+      ? `✅ Saved context "${label}"\n\nThis will be injected into your future summaries.`
+      : "❌ Could not save your context. Try again."
+  );
 }

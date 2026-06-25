@@ -1,25 +1,23 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
-import { supabase } from "../../db/supabase.js";
+import { listUserChannels } from "../../services/subscriptions.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 
 export async function listChannelsCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
-  const { data: channels, error } = await supabase
-    .from("channels")
-    .select("name, default_category, youtube_channel_id")
-    .eq("active", true)
-    .order("created_at", { ascending: true });
+  const channels = await listUserChannels(user.id);
 
-  if (error || !channels?.length) {
+  if (!channels.length) {
     await ctx.reply("No channels tracked yet. Use /add_channel to get started.");
     return;
   }
 
-  let msg = "📺 *Tracked Channels*\n\n";
+  let msg = "📺 *Your Tracked Channels*\n\n";
   for (let i = 0; i < channels.length; i++) {
-    const ch = channels[i];
-    const cat = ch.default_category ? ` (${ch.default_category})` : "";
+    const ch = channels[i].channel;
+    const category = channels[i].subscription.default_category ?? ch.default_category;
+    const cat = category ? ` (${category})` : "";
     msg += `${i + 1}. ${ch.name}${cat}\n`;
   }
 

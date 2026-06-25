@@ -1,6 +1,4 @@
 import { Markup, type Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
-import { supabase } from "../../db/supabase.js";
 import { classifyIntent } from "../../services/intent-router.js";
 import {
   searchBrain,
@@ -17,11 +15,11 @@ import {
 import {
   resolveChannel,
   searchChannels,
-  getVideoMetadata,
 } from "../../services/youtube.js";
-import { pollChannel } from "../../services/rss.js";
-import { processVideo } from "../../scheduler/cron.js";
-import { categories, type Category, type Channel, type Video } from "../../types/index.js";
+import { listUserChannels, removeUserChannelsByName } from "../../services/subscriptions.js";
+import { setContextEntry } from "../../services/preferences.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
+import { summarizeVideoById } from "../commands/fetch.js";
 import { log } from "../../utils/logger.js";
 
 /**
@@ -35,23 +33,15 @@ export async function smartHandler(ctx: Context) {
   if (text.startsWith("/")) return;
   if (!text.trim()) return;
 
-  const chatId = String(ctx.chat?.id ?? "");
-  if (!ownerChatId) {
-    await ctx.reply("Send /start first so I can bind this bot to your chat.");
-    return;
-  }
-
-  if (chatId !== ownerChatId) {
-    await ctx.reply("This is a personal bot. Access denied.");
-    return;
-  }
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   log.info("handler", `Text received: ${text.slice(0, 80)}`);
 
   // Fast path: if it's clearly a YouTube URL, skip the Claude call
   const videoId = extractVideoId(text);
   if (videoId) {
-    await handleDigestVideo(ctx, videoId);
+    await handleDigestVideo(ctx, videoId, user.id);
     return;
   }
 
@@ -86,7 +76,7 @@ export async function smartHandler(ctx: Context) {
       if (intent.url) {
         const vid = extractVideoId(intent.url);
         if (vid) {
-          await handleDigestVideo(ctx, vid);
+          await handleDigestVideo(ctx, vid, user.id);
         } else {
           await ctx.reply("Couldn't extract a video ID from that URL.");
         }
@@ -96,12 +86,12 @@ export async function smartHandler(ctx: Context) {
       break;
 
     case "list_channels":
-      await handleListChannels(ctx);
+      await handleListChannels(ctx, user.id);
       break;
 
     case "remove_channel":
       if (intent.query) {
-        await handleRemoveChannel(ctx, intent.query);
+        await handleRemoveChannel(ctx, user.id, intent.query);
       } else {
         await ctx.reply("Which channel should I stop tracking? Give me the name.");
       }
@@ -134,29 +124,19 @@ export async function smartHandler(ctx: Context) {
       break;
 
     case "my_context":
-      await ctx.reply(await getMyContext());
+        await ctx.reply(await getMyContext(user.id));
       break;
 
     case "set_context": {
       const label = intent.label;
       const contextText = intent.context_text;
       if (label && contextText) {
-        const { data: existing } = await supabase
-          .from("user_context")
-          .select("id")
-          .eq("label", label)
-          .single();
-
-        if (existing) {
-          await supabase
-            .from("user_context")
-            .update({ context: contextText, active: true })
-            .eq("id", existing.id);
-          await ctx.reply(`Updated context "${label}"`);
-        } else {
-          await supabase.from("user_context").insert({ label, context: contextText, active: true });
-          await ctx.reply(`Saved context "${label}" — this will be used in all future summaries.`);
-        }
+        const saved = await setContextEntry(user.id, label, contextText);
+        await ctx.reply(
+          saved
+            ? `Saved context "${label}" — this will be used in your future summaries.`
+            : "I could not save that context. Try again."
+        );
       } else {
         await ctx.reply("Tell me what to save. Example: \"My context: I'm a SaaS founder focused on AI and SEO\"");
       }
@@ -175,53 +155,8 @@ export async function smartHandler(ctx: Context) {
 
 // --- Action handlers ---
 
-async function handleDigestVideo(ctx: Context, videoId: string): Promise<void> {
-  const { data: existing } = await supabase
-    .from("videos")
-    .select("id, processed, title")
-    .eq("youtube_video_id", videoId)
-    .single();
-
-  if (existing?.processed) {
-    await ctx.reply(`Already digested "${existing.title}". Use /reprocess to redo.`);
-    return;
-  }
-
-  const meta = await getVideoMetadata(videoId);
-  const title = meta?.title ?? "Unknown video";
-
-  await ctx.reply(`⏳ Digesting "${title}"...`);
-
-  let video: Video;
-  if (existing) {
-    const { data } = await supabase.from("videos").select("*").eq("id", existing.id).single();
-    video = data as Video;
-  } else {
-    const { data, error } = await supabase
-      .from("videos")
-      .insert({
-        youtube_video_id: videoId,
-        title,
-        thumbnail_url: meta?.thumbnailUrl ?? null,
-        processed: false,
-        transcript_status: "pending",
-      })
-      .select()
-      .single();
-
-    if (error || !data) {
-      await ctx.reply("Failed to queue video.");
-      return;
-    }
-    video = data as Video;
-  }
-
-  try {
-    await processVideo(video);
-    await ctx.reply("✅ Done!");
-  } catch (err) {
-    await ctx.reply(`Processing failed: ${err}`);
-  }
+async function handleDigestVideo(ctx: Context, videoId: string, userId: string): Promise<void> {
+  await summarizeVideoById(ctx, videoId, {}, userId);
 }
 
 async function handleChannelUrl(ctx: Context, url: string): Promise<void> {
@@ -290,40 +225,32 @@ async function showCategoryPicker(ctx: Context, channelId: string): Promise<void
   );
 }
 
-async function handleListChannels(ctx: Context): Promise<void> {
-  const { data: channels } = await supabase
-    .from("channels")
-    .select("name, default_category")
-    .eq("active", true)
-    .order("created_at", { ascending: true });
+async function handleListChannels(ctx: Context, userId: string): Promise<void> {
+  const channels = await listUserChannels(userId);
 
-  if (!channels?.length) {
+  if (!channels.length) {
     await ctx.reply("No channels tracked yet. Send me a YouTube channel name or URL to get started.");
     return;
   }
 
   let msg = "📺 Tracked channels:\n\n";
-  channels.forEach((ch: { name: string; default_category: string | null }, i: number) => {
-    const cat = ch.default_category?.replace("_", " ") ?? "auto";
-    msg += `${i + 1}. ${ch.name} (${cat})\n`;
+  channels.forEach(({ channel, subscription }, i) => {
+    const category = subscription.default_category ?? channel.default_category;
+    const cat = category?.replace("_", " ") ?? "auto";
+    msg += `${i + 1}. ${channel.name} (${cat})\n`;
   });
 
   await ctx.reply(msg);
 }
 
-async function handleRemoveChannel(ctx: Context, name: string): Promise<void> {
-  const { data, error } = await supabase
-    .from("channels")
-    .update({ active: false })
-    .ilike("name", `%${name}%`)
-    .eq("active", true)
-    .select("name");
+async function handleRemoveChannel(ctx: Context, userId: string, name: string): Promise<void> {
+  const removed = await removeUserChannelsByName(userId, name);
 
-  if (error || !data?.length) {
+  if (!removed.length) {
     await ctx.reply(`No active channel matching "${name}".`);
     return;
   }
 
-  const names = data.map((c: { name: string }) => c.name).join(", ");
+  const names = removed.join(", ");
   await ctx.reply(`Stopped tracking: ${names}`);
 }

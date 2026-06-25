@@ -21,25 +21,36 @@ export async function deliverSummary(
   channelName: string,
   brainObjectCount?: number
 ): Promise<boolean> {
-  if (!botInstance) {
-    log.error("delivery", "Bot not initialized");
-    return false;
-  }
-
   if (!ownerChatId) {
     log.warn("delivery", `No Telegram owner chat bound; skipping delivery for "${video.title}"`);
     return false;
   }
 
+  return deliverSummaryToChat(video, summary, channelName, ownerChatId, null, brainObjectCount);
+}
+
+export async function deliverSummaryToChat(
+  video: Video,
+  summary: Summary,
+  channelName: string,
+  telegramChatId: string,
+  userId?: string | null,
+  brainObjectCount?: number
+): Promise<boolean> {
+  if (!botInstance) {
+    log.error("delivery", "Bot not initialized");
+    return false;
+  }
+
   try {
-    const outputFormat = await getOutputFormat();
+    const outputFormat = await getOutputFormat(userId);
     const messages = formatSummary(video, summary, channelName, brainObjectCount, outputFormat);
 
     let lastMessageId: number | undefined;
     for (const msg of messages) {
       const options = msg.parseMode ? { parse_mode: msg.parseMode } : undefined;
       const sent = await botInstance.telegram.sendMessage(
-        ownerChatId,
+        telegramChatId,
         msg.text,
         options
       );
@@ -49,19 +60,19 @@ export async function deliverSummary(
     // Log delivery
     await supabase.from("delivery_log").insert({
       summary_id: summary.id,
-      telegram_chat_id: ownerChatId,
+      telegram_chat_id: telegramChatId,
       telegram_message_id: lastMessageId?.toString() ?? null,
       status: "sent",
     });
 
-    log.info("delivery", `Delivered summary for "${video.title}"`);
+    log.info("delivery", `Delivered summary for "${video.title}" to chat ${telegramChatId}`);
     return true;
   } catch (err) {
-    log.error("delivery", `Failed to deliver summary for "${video.title}"`, err);
+    log.error("delivery", `Failed to deliver summary for "${video.title}" to chat ${telegramChatId}`, err);
 
     await supabase.from("delivery_log").insert({
       summary_id: summary.id,
-      telegram_chat_id: ownerChatId,
+      telegram_chat_id: telegramChatId,
       status: "failed",
     });
 

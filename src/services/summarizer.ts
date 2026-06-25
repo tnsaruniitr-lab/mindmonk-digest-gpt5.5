@@ -23,10 +23,11 @@ export async function generateSummary(
   transcript: string,
   category: Category,
   videoTitle: string,
-  channelName: string
+  channelName: string,
+  userId?: string | null
 ): Promise<SummaryResponse | null> {
   try {
-    const preferences = await getUserPreferences();
+    const preferences = await getUserPreferences(userId);
 
     const userPrompt = buildSummaryPrompt(
       category,

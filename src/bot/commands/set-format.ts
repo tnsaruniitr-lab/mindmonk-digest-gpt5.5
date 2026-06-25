@@ -1,10 +1,10 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import {
   clearOutputFormat,
   getOutputFormat,
   setOutputFormat,
 } from "../../services/preferences.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 import { DEFAULT_OUTPUT_FORMAT } from "../formatter.js";
 
 const PLACEHOLDERS = [
@@ -25,13 +25,14 @@ const PLACEHOLDERS = [
 ];
 
 export async function setFormatCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
   const format = text.replace(/^\/set_format(?:@\w+)?\s*/i, "").trim();
 
   if (!format) {
-    const current = await getOutputFormat();
+    const current = await getOutputFormat(user.id);
     await ctx.reply(
       `Current output format:\n\n${current ?? "(default four-section digest)"}\n\n` +
         `To set a custom format, send:\n/set_format\n${DEFAULT_OUTPUT_FORMAT}\n\n` +
@@ -42,7 +43,7 @@ export async function setFormatCommand(ctx: Context) {
   }
 
   if (/^(reset|default|clear)$/i.test(format)) {
-    const cleared = await clearOutputFormat();
+    const cleared = await clearOutputFormat(user.id);
     await ctx.reply(
       cleared
         ? "Output format reset to the default four-section digest."
@@ -56,7 +57,7 @@ export async function setFormatCommand(ctx: Context) {
     return;
   }
 
-  const saved = await setOutputFormat(format);
+  const saved = await setOutputFormat(format, user.id);
   await ctx.reply(
     saved
       ? `Saved output format. Future digests will use:\n\n${format}`

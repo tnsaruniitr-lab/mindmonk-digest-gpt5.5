@@ -1,5 +1,4 @@
 import { Markup, type Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
 import {
   isYoutubeUrl,
@@ -11,6 +10,9 @@ import { pollChannel } from "../../services/rss.js";
 import { processVideo } from "../../scheduler/cron.js";
 import { categories, type Category, type Channel, type Video } from "../../types/index.js";
 import { log } from "../../utils/logger.js";
+import { subscribeUserToChannel, upsertChannel } from "../../services/subscriptions.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
+import { summarizeVideoById } from "../commands/fetch.js";
 
 /**
  * Smart text handler:
@@ -19,7 +21,8 @@ import { log } from "../../utils/logger.js";
  * - Plain text → search YouTube channels and show results as buttons
  */
 export async function urlDetectHandler(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text =
     (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
@@ -30,7 +33,7 @@ export async function urlDetectHandler(ctx: Context) {
   // --- Case 1: YouTube video URL → auto-digest ---
   const videoId = extractVideoId(text);
   if (videoId) {
-    await handleVideoUrl(ctx, videoId);
+    await summarizeVideoById(ctx, videoId, {}, user.id);
     return;
   }
 
@@ -162,6 +165,11 @@ async function handleSearch(ctx: Context, query: string): Promise<void> {
  */
 export async function pickChannelCallback(ctx: Context) {
   if (!ctx.callbackQuery || !("data" in ctx.callbackQuery)) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") {
+    await ctx.answerCbQuery("Please send /start first.");
+    return;
+  }
 
   const channelId = ctx.callbackQuery.data.replace("pickch:", "");
   await ctx.answerCbQuery();
@@ -191,6 +199,11 @@ export async function pickChannelCallback(ctx: Context) {
  */
 export async function addChannelCallback(ctx: Context) {
   if (!ctx.callbackQuery || !("data" in ctx.callbackQuery)) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") {
+    await ctx.answerCbQuery("Please send /start first.");
+    return;
+  }
 
   const parts = ctx.callbackQuery.data.replace("addch:", "").split(":");
   const channelId = parts[0];
@@ -211,88 +224,39 @@ export async function addChannelCallback(ctx: Context) {
     channelName = feed.title ?? channelId;
   } catch {}
 
-  // Upsert channel
-  const { data: existing } = await supabase
-    .from("channels")
-    .select("id")
-    .eq("youtube_channel_id", channelId)
-    .single();
+  const channel = await upsertChannel({
+    youtubeChannelId: channelId,
+    name: channelName,
+    rssFeedUrl,
+    defaultCategory: category,
+    active: true,
+  });
 
-  if (existing) {
-    await supabase
-      .from("channels")
-      .update({ active: true, name: channelName, default_category: category, rss_feed_url: rssFeedUrl })
-      .eq("id", existing.id);
-  } else {
-    await supabase.from("channels").insert({
-      youtube_channel_id: channelId,
-      name: channelName,
-      rss_feed_url: rssFeedUrl,
-      active: true,
-      default_category: category,
-    });
+  if (!channel) {
+    await ctx.editMessageText(`❌ Could not save ${channelName}. Try again.`);
+    return;
+  }
+
+  const subscribed = await subscribeUserToChannel(user.id, channel.id, category);
+  if (!subscribed) {
+    await ctx.editMessageText(`❌ Could not subscribe you to ${channelName}. Try again.`);
+    return;
   }
 
   const catLabel = category?.replace("_", " ") ?? "auto-detect";
-  await ctx.editMessageText(`✅ Now tracking ${channelName} (${catLabel})`);
+  await ctx.editMessageText(`✅ Now tracking ${channelName} for you (${catLabel})`);
 
   // Backfill recent videos
-  const { data: channelRow } = await supabase
-    .from("channels")
-    .select("*")
-    .eq("youtube_channel_id", channelId)
-    .single();
+  const videos = await pollChannel(channel as Channel);
+  const latest = videos[0];
 
-  if (channelRow) {
-    const videos = await pollChannel(channelRow as Channel);
-    const newVideoIds: string[] = [];
-
-    for (const video of videos.slice(0, 1)) {
-      const { data: existingVid } = await supabase
-        .from("videos")
-        .select("id")
-        .eq("youtube_video_id", video.videoId)
-        .single();
-
-      if (!existingVid) {
-        const { data: inserted } = await supabase
-          .from("videos")
-          .insert({
-            channel_id: channelRow.id,
-            youtube_video_id: video.videoId,
-            title: video.title,
-            published_at: video.publishedAt,
-            processed: false,
-            transcript_status: "pending",
-          })
-          .select("id")
-          .single();
-
-        if (inserted) newVideoIds.push(inserted.id);
-      }
-    }
-
-    if (newVideoIds.length > 0) {
-      await ctx.reply(`⏳ Digesting ${newVideoIds.length} latest video(s)...`);
-
-      // Process immediately instead of waiting for cron
-      for (const id of newVideoIds) {
-        const { data: videoRow } = await supabase
-          .from("videos")
-          .select("*")
-          .eq("id", id)
-          .single();
-
-        if (videoRow) {
-          try {
-            await processVideo(videoRow as Video);
-          } catch (err) {
-            log.error("addch", `Failed to process video ${id}`, err);
-          }
-        }
-      }
-
-      await ctx.reply("✅ Done! Summaries sent above.");
-    }
+  if (latest) {
+    await ctx.reply(`⏳ Digesting latest video: "${latest.title}"`);
+    await summarizeVideoById(ctx, latest.videoId, {
+      channelId: channel.id,
+      title: latest.title,
+      publishedAt: latest.publishedAt,
+      thumbnailUrl: latest.thumbnailUrl,
+    }, user.id);
   }
 }

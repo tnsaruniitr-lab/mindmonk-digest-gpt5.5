@@ -1,12 +1,12 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
 import { extractVideoId } from "../../utils/youtube-url.js";
-import { processVideo } from "../../scheduler/cron.js";
-import type { Video } from "../../types/index.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
+import { summarizeVideoById } from "./fetch.js";
 
 export async function reprocessCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
   const url = text.replace(/^\/reprocess\s*/, "").trim();
@@ -52,10 +52,10 @@ export async function reprocessCommand(ctx: Context) {
     .eq("id", video.id)
     .single();
 
-  try {
-    await processVideo(updatedVideo as Video);
-    await ctx.reply("✅ Reprocessing complete! New summary sent above.");
-  } catch (err) {
-    await ctx.reply(`❌ Reprocessing failed: ${err}`);
+  if (!updatedVideo) {
+    await ctx.reply("❌ Could not reload the video for reprocessing.");
+    return;
   }
+
+  await summarizeVideoById(ctx, videoId, {}, user.id);
 }

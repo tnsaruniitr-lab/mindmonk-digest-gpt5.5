@@ -1,9 +1,10 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
-import { supabase } from "../../db/supabase.js";
+import { removeUserChannelsByName } from "../../services/subscriptions.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 
 export async function removeChannelCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
   const name = text.replace(/^\/remove_channel\s*/, "").trim();
@@ -13,18 +14,13 @@ export async function removeChannelCommand(ctx: Context) {
     return;
   }
 
-  const { data, error } = await supabase
-    .from("channels")
-    .update({ active: false })
-    .ilike("name", `%${name}%`)
-    .eq("active", true)
-    .select("name");
+  const removed = await removeUserChannelsByName(user.id, name);
 
-  if (error || !data?.length) {
-    await ctx.reply(`❌ No active channel matching "${name}" found.`);
+  if (!removed.length) {
+    await ctx.reply(`❌ You do not have an active channel matching "${name}".`);
     return;
   }
 
-  const names = data.map((c: { name: string }) => c.name).join(", ");
+  const names = removed.join(", ");
   await ctx.reply(`✅ Stopped tracking: ${names}`);
 }

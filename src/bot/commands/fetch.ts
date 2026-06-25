@@ -1,9 +1,9 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
 import { formatSummary } from "../formatter.js";
 import { processVideo } from "../../scheduler/cron.js";
 import { getOutputFormat } from "../../services/preferences.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 import { getVideoMetadata } from "../../services/youtube.js";
 import { extractVideoId } from "../../utils/youtube-url.js";
 import type { Summary, Video } from "../../types/index.js";
@@ -13,10 +13,6 @@ interface VideoSeed {
   title?: string | null;
   publishedAt?: string | null;
   thumbnailUrl?: string | null;
-}
-
-function isOwner(ctx: Context): boolean {
-  return Boolean(ownerChatId && String(ctx.chat?.id) === ownerChatId);
 }
 
 export function commandArg(ctx: Context, command: string): string {
@@ -40,9 +36,10 @@ async function sendSummaryToChat(
   ctx: Context,
   video: Video,
   summary: Summary,
-  channelName: string
+  channelName: string,
+  userId?: string | null
 ): Promise<void> {
-  const outputFormat = await getOutputFormat();
+  const outputFormat = await getOutputFormat(userId);
   const messages = formatSummary(video, summary, channelName, undefined, outputFormat);
 
   for (const msg of messages) {
@@ -93,7 +90,8 @@ async function upsertVideo(videoId: string, seed: VideoSeed): Promise<Video | nu
 export async function summarizeVideoById(
   ctx: Context,
   videoId: string,
-  seed: VideoSeed = {}
+  seed: VideoSeed = {},
+  userId?: string | null
 ): Promise<void> {
   const video = await upsertVideo(videoId, seed);
   if (!video) {
@@ -105,7 +103,7 @@ export async function summarizeVideoById(
     const summary = await loadSummary(video.id);
     if (summary) {
       await ctx.reply(`✅ Found cached summary for "${video.title}".`);
-      await sendSummaryToChat(ctx, video, summary, await getChannelName(video));
+      await sendSummaryToChat(ctx, video, summary, await getChannelName(video), userId);
       return;
     }
 
@@ -121,6 +119,7 @@ export async function summarizeVideoById(
   const result = await processVideo(video, {
     deliver: false,
     notifyOnFailure: false,
+    userId,
   });
 
   if (result.status === "no_transcript") {
@@ -139,22 +138,27 @@ export async function summarizeVideoById(
     return;
   }
 
-  await sendSummaryToChat(ctx, video, summary, result.channelName);
+  await sendSummaryToChat(ctx, video, summary, result.channelName, userId);
   await ctx.reply("✅ Done.");
 }
 
-export async function summarizeVideoFromUrl(ctx: Context, url: string): Promise<void> {
+export async function summarizeVideoFromUrl(
+  ctx: Context,
+  url: string,
+  userId?: string | null
+): Promise<void> {
   const videoId = extractVideoId(url);
   if (!videoId) {
     await ctx.reply("❌ Could not extract a YouTube video ID from that URL.");
     return;
   }
 
-  await summarizeVideoById(ctx, videoId);
+  await summarizeVideoById(ctx, videoId, {}, userId);
 }
 
 export async function fetchCommand(ctx: Context): Promise<void> {
-  if (!isOwner(ctx)) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const url = commandArg(ctx, "fetch");
   if (!url) {
@@ -162,5 +166,5 @@ export async function fetchCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  await summarizeVideoFromUrl(ctx, url);
+  await summarizeVideoFromUrl(ctx, url, user.id);
 }

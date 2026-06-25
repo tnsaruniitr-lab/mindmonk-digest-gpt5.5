@@ -1,8 +1,9 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 
 export async function helpCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   await ctx.reply(
     `*Commands*\n\n` +

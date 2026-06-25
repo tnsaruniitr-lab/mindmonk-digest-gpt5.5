@@ -1,9 +1,11 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
+import { listUserChannels } from "../../services/subscriptions.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 
 export async function statusCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const { count: pendingCount } = await supabase
     .from("videos")
@@ -23,10 +25,7 @@ export async function statusCommand(ctx: Context) {
     .from("brain_objects")
     .select("*", { count: "exact", head: true });
 
-  const { count: channelCount } = await supabase
-    .from("channels")
-    .select("*", { count: "exact", head: true })
-    .eq("active", true);
+  const channels = await listUserChannels(user.id);
 
   // Recent processed
   const { data: recent } = await supabase
@@ -37,7 +36,7 @@ export async function statusCommand(ctx: Context) {
     .limit(5);
 
   let msg = `📊 *Status*\n\n`;
-  msg += `Channels tracked: ${channelCount ?? 0}\n`;
+  msg += `Your channels tracked: ${channels.length}\n`;
   msg += `Total videos: ${totalVideos ?? 0}\n`;
   msg += `Pending in queue: ${pendingCount ?? 0}\n`;
   msg += `No captions: ${unavailableCount ?? 0}\n`;

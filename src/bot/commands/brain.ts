@@ -1,11 +1,12 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 import { formatBrainObject } from "../formatter.js";
 import { brainObjectTypes } from "../../types/index.js";
 
 export async function brainCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
   const typeFilter = text.replace(/^\/brain\s*/, "").trim().toLowerCase();

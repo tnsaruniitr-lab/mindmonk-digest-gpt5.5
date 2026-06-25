@@ -1,13 +1,14 @@
 import type { Context } from "telegraf";
 import { ownerChatId, setOwnerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
-
-const OWNER_CHAT_ID_LABEL = "telegram_owner_chat_id";
+import { getOrCreateTelegramUser, OWNER_CHAT_ID_LABEL } from "../../services/users.js";
 
 export async function startCommand(ctx: Context) {
   const chatId = String(ctx.chat?.id);
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user) return;
 
-  // First user to /start becomes the owner
+  // Keep the legacy owner binding for scheduled delivery/admin fallback.
   if (!ownerChatId) {
     setOwnerChatId(chatId);
     await supabase.from("user_context").upsert(
@@ -20,16 +21,10 @@ export async function startCommand(ctx: Context) {
     );
   }
 
-  if (chatId !== ownerChatId) {
-    await ctx.reply("This is a personal bot. Access denied.");
-    return;
-  }
-
   await ctx.reply(
     `🎬 *MindMonk — YouTube Digest Bot*\n\n` +
       `I track your YouTube channels, summarize new videos, and extract structured insights into your personal brain\\.\n\n` +
-      `Your chat ID: \`${chatId}\`\n` +
-      `Save this in your \\.env as TELEGRAM\\_CHAT\\_ID for persistence across restarts\\.\n\n` +
+      `Your account is ready\\.\n\n` +
       `*Get started:*\n` +
       `/add\\_channel \\<url\\> \\[category\\] — Track a channel\n` +
       `/set\\_format — Set your preferred digest template\n` +

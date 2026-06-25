@@ -47,6 +47,9 @@ const pool = new Pool({
 });
 
 const allowedTables = new Set([
+  "users",
+  "user_preferences",
+  "user_channel_subscriptions",
   "channels",
   "videos",
   "summaries",
@@ -484,6 +487,29 @@ export async function ensureDatabaseSchema(): Promise<void> {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
 
+    CREATE TABLE IF NOT EXISTS users (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      telegram_user_id text NOT NULL UNIQUE,
+      telegram_chat_id text NOT NULL UNIQUE,
+      username text,
+      display_name text,
+      timezone text NOT NULL DEFAULT 'UTC',
+      plan text NOT NULL DEFAULT 'free',
+      status text NOT NULL DEFAULT 'active',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      last_seen_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      profile_context text,
+      output_format text,
+      delivery_mode text NOT NULL DEFAULT 'manual',
+      max_auto_digests_per_day integer NOT NULL DEFAULT 3,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS channels (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       youtube_channel_id text NOT NULL UNIQUE,
@@ -493,6 +519,16 @@ export async function ensureDatabaseSchema(): Promise<void> {
       active boolean NOT NULL DEFAULT true,
       default_category digest_category,
       created_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS user_channel_subscriptions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      channel_id uuid NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      default_category digest_category,
+      active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (user_id, channel_id)
     );
 
     CREATE TABLE IF NOT EXISTS videos (
@@ -555,6 +591,11 @@ export async function ensureDatabaseSchema(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     );
 
+    CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
+    CREATE INDEX IF NOT EXISTS idx_users_telegram_chat_id ON users(telegram_chat_id);
+    CREATE INDEX IF NOT EXISTS idx_user_channel_subscriptions_user_id ON user_channel_subscriptions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_channel_subscriptions_channel_id ON user_channel_subscriptions(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_user_channel_subscriptions_active ON user_channel_subscriptions(active);
     CREATE INDEX IF NOT EXISTS idx_channels_active ON channels(active);
     CREATE INDEX IF NOT EXISTS idx_videos_processed ON videos(processed);
     CREATE INDEX IF NOT EXISTS idx_videos_channel_id ON videos(channel_id);

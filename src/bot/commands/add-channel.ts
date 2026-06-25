@@ -1,13 +1,14 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
-import { supabase } from "../../db/supabase.js";
 import { resolveChannel } from "../../services/youtube.js";
 import { pollChannel } from "../../services/rss.js";
-import { categories, type Category, type Channel, type Video } from "../../types/index.js";
-import { processVideo } from "../../scheduler/cron.js";
+import { subscribeUserToChannel, upsertChannel } from "../../services/subscriptions.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
+import { categories, type Category, type Channel } from "../../types/index.js";
+import { summarizeVideoById } from "./fetch.js";
 
 export async function addChannelCommand(ctx: Context) {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const text = (ctx.message && "text" in ctx.message ? ctx.message.text : "") ?? "";
   const args = text.replace(/^\/add_channel\s*/, "").trim().split(/\s+/);
@@ -30,100 +31,39 @@ export async function addChannelCommand(ctx: Context) {
   const category = categoryArg && categories.includes(categoryArg) ? categoryArg : null;
   const rssFeedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelInfo.channelId}`;
 
-  // Upsert channel
-  const { data: existing } = await supabase
-    .from("channels")
-    .select("id, active")
-    .eq("youtube_channel_id", channelInfo.channelId)
-    .single();
+  const channel = await upsertChannel({
+    youtubeChannelId: channelInfo.channelId,
+    name: channelInfo.name,
+    thumbnailUrl: channelInfo.thumbnailUrl,
+    rssFeedUrl,
+    defaultCategory: category,
+    active: true,
+  });
 
-  if (existing) {
-    await supabase
-      .from("channels")
-      .update({
-        active: true,
-        name: channelInfo.name,
-        default_category: category,
-        rss_feed_url: rssFeedUrl,
-      })
-      .eq("id", existing.id);
-
-    await ctx.reply(`✅ Re-activated "${channelInfo.name}"${category ? ` (${category})` : ""}`);
-  } else {
-    const { error } = await supabase.from("channels").insert({
-      youtube_channel_id: channelInfo.channelId,
-      name: channelInfo.name,
-      thumbnail_url: channelInfo.thumbnailUrl,
-      rss_feed_url: rssFeedUrl,
-      active: true,
-      default_category: category,
-    });
-
-    if (error) {
-      await ctx.reply("❌ Failed to save channel. Try again.");
-      return;
-    }
-
-    await ctx.reply(`✅ Now tracking "${channelInfo.name}"${category ? ` (${category})` : ""}`);
+  if (!channel) {
+    await ctx.reply("❌ Failed to save channel. Try again.");
+    return;
   }
 
+  const subscribed = await subscribeUserToChannel(user.id, channel.id, category);
+  if (!subscribed) {
+    await ctx.reply("❌ Failed to subscribe you to that channel. Try again.");
+    return;
+  }
+
+  await ctx.reply(`✅ Now tracking "${channelInfo.name}" for you${category ? ` (${category})` : ""}`);
+
   // Backfill recent videos
-  const { data: channelRow } = await supabase
-    .from("channels")
-    .select("*")
-    .eq("youtube_channel_id", channelInfo.channelId)
-    .single();
+  const videos = await pollChannel(channel as Channel);
+  const latest = videos[0];
 
-  if (channelRow) {
-    const videos = await pollChannel(channelRow as Channel);
-    const newVideoIds: string[] = [];
-
-    for (const video of videos.slice(0, 1)) {
-      const { data: existingVid } = await supabase
-        .from("videos")
-        .select("id")
-        .eq("youtube_video_id", video.videoId)
-        .single();
-
-      if (!existingVid) {
-        const { data: inserted } = await supabase
-          .from("videos")
-          .insert({
-            channel_id: channelRow.id,
-            youtube_video_id: video.videoId,
-            title: video.title,
-            published_at: video.publishedAt,
-            thumbnail_url: video.thumbnailUrl,
-            processed: false,
-            transcript_status: "pending",
-          })
-          .select("id")
-          .single();
-
-        if (inserted) newVideoIds.push(inserted.id);
-      }
-    }
-
-    if (newVideoIds.length > 0) {
-      await ctx.reply(`⏳ Digesting ${newVideoIds.length} latest video(s)...`);
-
-      for (const id of newVideoIds) {
-        const { data: videoRow } = await supabase
-          .from("videos")
-          .select("*")
-          .eq("id", id)
-          .single();
-
-        if (videoRow) {
-          try {
-            await processVideo(videoRow as Video);
-          } catch (err) {
-            // logged internally
-          }
-        }
-      }
-
-      await ctx.reply("✅ Done! Summaries sent above.");
-    }
+  if (latest) {
+    await ctx.reply(`⏳ Digesting latest video: "${latest.title}"`);
+    await summarizeVideoById(ctx, latest.videoId, {
+      channelId: channel.id,
+      title: latest.title,
+      publishedAt: latest.publishedAt,
+      thumbnailUrl: latest.thumbnailUrl,
+    }, user.id);
   }
 }

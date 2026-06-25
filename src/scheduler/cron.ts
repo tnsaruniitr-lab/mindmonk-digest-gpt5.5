@@ -5,7 +5,8 @@ import { getTranscriptForVideo } from "../services/transcript.js";
 import { classifyVideo } from "../services/classifier.js";
 import { generateSummary } from "../services/summarizer.js";
 import { extractBrainObjects } from "../services/brain-extractor.js";
-import { deliverSummary, notify } from "../services/delivery.js";
+import { deliverSummary, deliverSummaryToChat, notify } from "../services/delivery.js";
+import { loadActiveSubscribers } from "../services/users.js";
 import type { Video, Channel, Summary } from "../types/index.js";
 import type { Category } from "../types/index.js";
 import { log } from "../utils/logger.js";
@@ -17,6 +18,7 @@ let processing = false;
 interface ProcessVideoOptions {
   deliver?: boolean;
   notifyOnFailure?: boolean;
+  userId?: string | null;
 }
 
 export interface ProcessVideoResult {
@@ -72,7 +74,8 @@ export async function processVideo(
     transcript,
     category,
     video.title,
-    channelName
+    channelName,
+    options.userId
   );
 
   if (!summaryData) {
@@ -91,7 +94,21 @@ export async function processVideo(
 
   if (summaryRow && shouldDeliver) {
     // 5. Deliver to Telegram
-    await deliverSummary(video, summaryRow as Summary, channelName);
+    const subscribers = video.channel_id ? await loadActiveSubscribers(video.channel_id) : [];
+
+    if (subscribers.length) {
+      for (const subscriber of subscribers) {
+        await deliverSummaryToChat(
+          video,
+          summaryRow as Summary,
+          channelName,
+          subscriber.telegram_chat_id,
+          subscriber.id
+        );
+      }
+    } else {
+      await deliverSummary(video, summaryRow as Summary, channelName);
+    }
   }
 
   // 6. Mark processed

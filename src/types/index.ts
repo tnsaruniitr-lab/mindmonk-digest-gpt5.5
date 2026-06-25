@@ -47,6 +47,38 @@ export interface Channel {
   created_at: string;
 }
 
+export interface User {
+  id: string;
+  telegram_user_id: string;
+  telegram_chat_id: string;
+  username: string | null;
+  display_name: string | null;
+  timezone: string;
+  plan: string;
+  status: "active" | "blocked";
+  created_at: string;
+  last_seen_at: string | null;
+}
+
+export interface UserPreferencesRow {
+  user_id: string;
+  profile_context: string | null;
+  output_format: string | null;
+  delivery_mode: string;
+  max_auto_digests_per_day: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserChannelSubscription {
+  id: string;
+  user_id: string;
+  channel_id: string;
+  default_category: Category | null;
+  active: boolean;
+  created_at: string;
+}
+
 export interface Video {
   id: string;
   channel_id: string;

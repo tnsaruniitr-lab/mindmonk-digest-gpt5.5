@@ -1,63 +1,29 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
 import { pollChannel } from "../../services/rss.js";
+import { subscribeUserToChannel, upsertChannel } from "../../services/subscriptions.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 import { resolveChannel } from "../../services/youtube.js";
 import type { Channel } from "../../types/index.js";
 import { commandArg, summarizeVideoById } from "./fetch.js";
-
-function isOwner(ctx: Context): boolean {
-  return Boolean(ownerChatId && String(ctx.chat?.id) === ownerChatId);
-}
 
 async function getOrCreateChannel(url: string): Promise<Channel | null> {
   const channelInfo = await resolveChannel(url);
   if (!channelInfo) return null;
 
   const rssFeedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelInfo.channelId}`;
-  const { data: existing } = await supabase
-    .from("channels")
-    .select("*")
-    .eq("youtube_channel_id", channelInfo.channelId)
-    .single();
-
-  if (existing) {
-    await supabase
-      .from("channels")
-      .update({
-        name: channelInfo.name,
-        thumbnail_url: channelInfo.thumbnailUrl,
-        rss_feed_url: rssFeedUrl,
-      })
-      .eq("id", existing.id);
-
-    const { data: refreshed } = await supabase
-      .from("channels")
-      .select("*")
-      .eq("id", existing.id)
-      .single();
-
-    return (refreshed as Channel | null) ?? (existing as Channel);
-  }
-
-  const { data: inserted } = await supabase
-    .from("channels")
-    .insert({
-      youtube_channel_id: channelInfo.channelId,
-      name: channelInfo.name,
-      thumbnail_url: channelInfo.thumbnailUrl,
-      rss_feed_url: rssFeedUrl,
-      active: false,
-      default_category: null,
-    })
-    .select()
-    .single();
-
-  return (inserted as Channel | null) ?? null;
+  return upsertChannel({
+    youtubeChannelId: channelInfo.channelId,
+    name: channelInfo.name,
+    thumbnailUrl: channelInfo.thumbnailUrl,
+    rssFeedUrl,
+    active: true,
+  });
 }
 
 export async function channelCommand(ctx: Context): Promise<void> {
-  if (!isOwner(ctx)) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const url = commandArg(ctx, "channel");
   if (!url) {
@@ -73,6 +39,8 @@ export async function channelCommand(ctx: Context): Promise<void> {
     return;
   }
 
+  await subscribeUserToChannel(user.id, channel.id, null);
+
   const videos = await pollChannel(channel);
   const latest = videos[0];
 
@@ -87,5 +55,5 @@ export async function channelCommand(ctx: Context): Promise<void> {
     title: latest.title,
     publishedAt: latest.publishedAt,
     thumbnailUrl: latest.thumbnailUrl,
-  });
+  }, user.id);
 }

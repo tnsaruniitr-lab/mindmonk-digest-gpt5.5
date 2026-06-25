@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { supabase } from "../db/supabase.js";
+import { getUserPreferences } from "./preferences.js";
 import { log } from "../utils/logger.js";
 
 let client: Anthropic | null = null;
@@ -182,7 +183,21 @@ export async function getStats(): Promise<string> {
 /**
  * Get user's personal context.
  */
-export async function getMyContext(): Promise<string> {
+export async function getMyContext(userId?: string | null): Promise<string> {
+  if (userId) {
+    const preferences = await getUserPreferences(userId);
+    if (!preferences.personalContext.length) {
+      return "No personal context set yet. Tell me about yourself!\n\nExample: \"My context: I'm a SaaS founder building AI-powered SEO tools, and I invest in tech stocks\"";
+    }
+
+    let msg = "🪞 Your personal context:\n\n";
+    for (const entry of preferences.personalContext) {
+      msg += `✅ ${entry.label}: ${entry.context}\n`;
+    }
+    msg += "\nThis is injected into your summaries to personalize insights for you.";
+    return msg;
+  }
+
   const { data } = await supabase
     .from("user_context")
     .select("label, context, active")

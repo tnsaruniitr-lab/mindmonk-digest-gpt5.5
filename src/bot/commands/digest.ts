@@ -1,9 +1,10 @@
 import type { Context } from "telegraf";
-import { ownerChatId } from "../../config.js";
 import { commandArg, summarizeVideoFromUrl } from "./fetch.js";
+import { getOrCreateTelegramUser } from "../../services/users.js";
 
 export async function digestCommand(ctx: Context): Promise<void> {
-  if (!ownerChatId || String(ctx.chat?.id) !== ownerChatId) return;
+  const user = await getOrCreateTelegramUser(ctx);
+  if (!user || user.status === "blocked") return;
 
   const url = commandArg(ctx, "digest");
   if (!url) {
@@ -11,5 +12,5 @@ export async function digestCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  await summarizeVideoFromUrl(ctx, url);
+  await summarizeVideoFromUrl(ctx, url, user.id);
 }

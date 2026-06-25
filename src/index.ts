@@ -21,6 +21,7 @@ import { startScheduler, stopScheduler } from "./scheduler/cron.js";
 import { setBot } from "./services/delivery.js";
 import { startHealthServer } from "./health-server.js";
 import { ensureDatabaseSchema, supabase } from "./db/supabase.js";
+import { ensureLegacyOwnerUser } from "./services/users.js";
 
 const OWNER_CHAT_ID_LABEL = "telegram_owner_chat_id";
 
@@ -124,7 +125,10 @@ async function startBot(): Promise<void> {
 }
 
 async function loadPersistedOwnerChatId(): Promise<void> {
-  if (ownerChatId) return;
+  if (ownerChatId) {
+    await ensureLegacyOwnerUser(ownerChatId);
+    return;
+  }
 
   const { data } = await supabase
     .from("user_context")
@@ -134,6 +138,7 @@ async function loadPersistedOwnerChatId(): Promise<void> {
 
   if (data?.context) {
     setOwnerChatId(data.context);
+    await ensureLegacyOwnerUser(data.context);
     log.info("bot", "Loaded persisted Telegram owner chat");
   }
 }
