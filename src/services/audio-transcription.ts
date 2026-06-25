@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import ffmpegPath from "ffmpeg-static";
 import { config } from "../config.js";
 import { log } from "../utils/logger.js";
-import { withRetry } from "../utils/retry.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_YTDLP_DOWNLOAD_MS = 8 * 60 * 1000;
@@ -168,12 +167,9 @@ async function downloadAudio(videoId: string, workDir: string): Promise<AudioFil
 
 async function splitAudioIfNeeded(audio: AudioFile, workDir: string): Promise<AudioFile[]> {
   const maxBytes = maxUploadBytes();
-  if (audio.sizeBytes <= maxBytes) return [audio];
-
   if (!ffmpegPath) {
-    throw new Error(
-      `Audio is ${Math.round(audio.sizeBytes / 1024 / 1024)} MB, above Groq upload limit, and ffmpeg is unavailable`
-    );
+    if (audio.sizeBytes <= maxBytes) return [audio];
+    throw new Error(`Audio is above Groq upload limit and ffmpeg is unavailable`);
   }
 
   const chunkDir = path.join(workDir, "chunks");
@@ -198,7 +194,7 @@ async function splitAudioIfNeeded(audio: AudioFile, workDir: string): Promise<Au
       "-f",
       "segment",
       "-segment_time",
-      "900",
+      config.GROQ_AUDIO_CHUNK_SECONDS.toString(),
       "-reset_timestamps",
       "1",
       chunkPattern,
@@ -216,8 +212,32 @@ async function splitAudioIfNeeded(audio: AudioFile, workDir: string): Promise<Au
     );
   }
 
-  log.info("transcript", `Split fallback audio into ${chunks.length} chunk(s) for Groq`);
+  log.info(
+    "transcript",
+    `Split fallback audio into ${chunks.length} chunk(s) for Groq (${config.GROQ_AUDIO_CHUNK_SECONDS}s each)`
+  );
   return chunks;
+}
+
+function parseRetryDelayMs(response: Response, body: string): number | null {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  }
+
+  const text = body.toLowerCase();
+  const match = text.match(/try again in\s+(?:(\d+)m)?\s*(?:(\d+)s)?/i);
+  if (!match) return null;
+
+  const minutes = Number(match[1] ?? 0);
+  const seconds = Number(match[2] ?? 0);
+  const delayMs = (minutes * 60 + seconds) * 1000;
+  return delayMs > 0 ? delayMs : null;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function transcribeAudioFile(file: AudioFile, index: number, total: number): Promise<string> {
@@ -241,29 +261,43 @@ async function transcribeAudioFile(file: AudioFile, index: number, total: number
     return form;
   };
 
-  const response = await withRetry(
-    () =>
-      fetch(GROQ_TRANSCRIPTION_URL, {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const response = await fetch(GROQ_TRANSCRIPTION_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${config.GROQ_API_KEY}`,
         },
         body: makeForm(),
-      }),
-    { label: `groq-transcribe-${index + 1}`, maxRetries: 2, baseDelay: 1500 }
-  );
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      const json = (await response.json()) as { text?: string };
+      const text = json.text?.trim() ?? "";
+      if (!text) throw new Error("Groq returned an empty transcription");
+
+      log.info("transcript", `Groq transcribed chunk ${index + 1}/${total} (${text.length} chars)`);
+      return text;
+    }
+
     const body = await response.text();
+    if (response.status === 429 && attempt < 3) {
+      const retryDelayMs = parseRetryDelayMs(response, body);
+      const cappedDelayMs = Math.min(
+        retryDelayMs ?? 60_000,
+        config.GROQ_MAX_RATE_LIMIT_WAIT_SECONDS * 1000
+      );
+      log.warn(
+        "transcript",
+        `Groq rate limit on chunk ${index + 1}/${total}; retrying in ${Math.round(cappedDelayMs / 1000)}s`
+      );
+      await delay(cappedDelayMs + 5000);
+      continue;
+    }
+
     throw new Error(`Groq transcription failed (${response.status}): ${redactSecrets(body)}`);
   }
 
-  const json = (await response.json()) as { text?: string };
-  const text = json.text?.trim() ?? "";
-  if (!text) throw new Error("Groq returned an empty transcription");
-
-  log.info("transcript", `Groq transcribed chunk ${index + 1}/${total} (${text.length} chars)`);
-  return text;
+  throw new Error("Groq transcription retry loop exhausted");
 }
 
 export async function fetchAudioTranscript(videoId: string): Promise<string | null> {

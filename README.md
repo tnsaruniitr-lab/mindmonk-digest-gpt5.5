@@ -35,6 +35,8 @@ ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-6
 GROQ_API_KEY=
 GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
+GROQ_AUDIO_CHUNK_SECONDS=180
+GROQ_MAX_RATE_LIMIT_WAIT_SECONDS=600
 GROQ_MAX_UPLOAD_MB=24
 TRANSCRIPT_AUDIO_FALLBACK=true
 YTDLP_PROXY_URL=
@@ -46,7 +48,7 @@ GRADER_LLM_API_KEY=
 
 The grader LLM fields are optional. Leave them blank to use the main summarizer's grading. Fill them when you want the "Unbiased grading" section to be produced by a separate model. Do not commit a real API key.
 
-The Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`.
+The Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`. Audio is chunked before upload so Groq rate limits can be retried chunk by chunk.
 
 3. Install dependencies:
 

@@ -21,6 +21,8 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().optional().default("claude-sonnet-4-6"),
   GROQ_API_KEY: z.string().optional().default(""),
   GROQ_TRANSCRIPTION_MODEL: z.string().optional().default("whisper-large-v3-turbo"),
+  GROQ_AUDIO_CHUNK_SECONDS: z.coerce.number().min(60).max(1800).optional().default(180),
+  GROQ_MAX_RATE_LIMIT_WAIT_SECONDS: z.coerce.number().min(30).max(1800).optional().default(600),
   GROQ_MAX_UPLOAD_MB: z.coerce.number().min(1).max(100).optional().default(24),
   TRANSCRIPT_AUDIO_FALLBACK: z
     .string()
