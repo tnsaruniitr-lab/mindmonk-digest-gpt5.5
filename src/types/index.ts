@@ -93,6 +93,20 @@ export interface Video {
   created_at: string;
 }
 
+export interface Transcript {
+  id: string;
+  video_id: string;
+  provider: string;
+  source: "captions" | "audio" | "summary_cache";
+  language: string;
+  text: string;
+  char_count: number;
+  duration_seconds: number | null;
+  cost_usd: string | number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Summary {
   id: string;
   video_id: string;

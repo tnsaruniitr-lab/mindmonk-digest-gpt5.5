@@ -87,7 +87,6 @@ export async function generateSummary(
         action_items: summaryData.action_items,
         quotable_moments: summaryData.quotable_moments,
         skip_assessment: summaryData.skip_assessment,
-        raw_transcript: transcript,
         model_used: config.ANTHROPIC_MODEL,
         tokens_used: tokensUsed,
       },

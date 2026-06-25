@@ -52,6 +52,7 @@ const allowedTables = new Set([
   "user_channel_subscriptions",
   "channels",
   "videos",
+  "transcripts",
   "summaries",
   "brain_objects",
   "user_context",
@@ -568,6 +569,21 @@ export async function ensureDatabaseSchema(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS transcripts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      video_id uuid NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      provider text NOT NULL,
+      source text NOT NULL,
+      language text NOT NULL DEFAULT 'en',
+      text text NOT NULL,
+      char_count integer NOT NULL,
+      duration_seconds integer,
+      cost_usd numeric(12, 6),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (video_id, language)
+    );
+
     CREATE TABLE IF NOT EXISTS brain_objects (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       type brain_object_type NOT NULL,
@@ -625,6 +641,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_videos_processed ON videos(processed);
     CREATE INDEX IF NOT EXISTS idx_videos_channel_id ON videos(channel_id);
     CREATE INDEX IF NOT EXISTS idx_videos_transcript_status ON videos(transcript_status);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_video_id ON transcripts(video_id);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts(source);
     CREATE INDEX IF NOT EXISTS idx_summaries_video_id ON summaries(video_id);
     CREATE INDEX IF NOT EXISTS idx_brain_objects_type ON brain_objects(type);
     CREATE INDEX IF NOT EXISTS idx_brain_objects_source_video_id ON brain_objects(source_video_id);

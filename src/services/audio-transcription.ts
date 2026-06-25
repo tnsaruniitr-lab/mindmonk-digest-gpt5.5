@@ -22,6 +22,13 @@ interface AudioFile {
   sizeBytes: number;
 }
 
+export interface AudioTranscriptResult {
+  text: string;
+  provider: TranscriptionProvider;
+  durationSeconds: number | null;
+  costUsd: number | null;
+}
+
 function redactSecrets(text: string): string {
   return text
     .replace(/https?:\/\/[^:@\s]+:[^@\s]+@/g, "http://[redacted]@")
@@ -264,6 +271,30 @@ function providerConfig(provider: TranscriptionProvider): {
   };
 }
 
+function providerCostPerMinute(provider: TranscriptionProvider): number {
+  return provider === "openai"
+    ? config.OPENAI_TRANSCRIPTION_COST_PER_MINUTE_USD
+    : config.GROQ_TRANSCRIPTION_COST_PER_MINUTE_USD;
+}
+
+function estimateDurationSeconds(
+  chunks: AudioFile[],
+  knownDurationSeconds?: number | null
+): number | null {
+  if (knownDurationSeconds && knownDurationSeconds > 0) return knownDurationSeconds;
+  if (chunks.length > 1) return chunks.length * config.AUDIO_CHUNK_SECONDS;
+  return null;
+}
+
+function estimateCostUsd(
+  provider: TranscriptionProvider,
+  durationSeconds: number | null
+): number | null {
+  if (!durationSeconds) return null;
+  const cost = (durationSeconds / 60) * providerCostPerMinute(provider);
+  return Number(cost.toFixed(6));
+}
+
 function parseRetryDelayMs(response: Response, body: string): number | null {
   const retryAfter = response.headers.get("retry-after");
   if (retryAfter) {
@@ -364,7 +395,10 @@ async function transcribeChunksWithProvider(
   return parts.join("\n\n").replace(/\s+/g, " ").trim();
 }
 
-export async function fetchAudioTranscript(videoId: string): Promise<string | null> {
+export async function fetchAudioTranscript(
+  videoId: string,
+  durationSeconds?: number | null
+): Promise<AudioTranscriptResult | null> {
   if (!config.TRANSCRIPT_AUDIO_FALLBACK) return null;
   if (!config.YTDLP_PROXY_URL) {
     log.warn("transcript", "Audio fallback skipped: YTDLP_PROXY_URL is not set");
@@ -394,7 +428,13 @@ export async function fetchAudioTranscript(videoId: string): Promise<string | nu
         if (!transcript) throw new Error(`${providerSettings.name} returned an empty transcript`);
 
         log.info("transcript", `Got audio transcript for ${videoId} via ${providerSettings.name} (${transcript.length} chars)`);
-        return transcript;
+        const estimatedDuration = estimateDurationSeconds(chunks, durationSeconds);
+        return {
+          text: transcript,
+          provider,
+          durationSeconds: estimatedDuration,
+          costUsd: estimateCostUsd(provider, estimatedDuration),
+        };
       } catch (err) {
         log.warn("transcript", `${providerSettings.name} audio transcription failed for ${videoId}: ${redactSecrets(String(err))}`);
       }

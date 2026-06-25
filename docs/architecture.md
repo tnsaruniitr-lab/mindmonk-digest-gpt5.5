@@ -101,7 +101,7 @@ Important current behavior:
 - If YouTube captions are available, the app does not download audio.
 - If captions are missing, the app downloads audio into Railway container `/tmp`.
 - Audio chunks are temporary and deleted after the job finishes.
-- Transcript text is stored in Postgres as part of the summary row.
+- Transcript text is stored once per video/language in the `transcripts` table.
 - Raw audio is not stored in Postgres.
 
 ### Current Data Model
@@ -110,33 +110,35 @@ Current tables:
 
 | Table | Purpose |
 |---|---|
+| `users` | Telegram user accounts and status |
+| `user_preferences` | Per-user profile, format, and delivery preferences |
 | `channels` | Global YouTube channels |
+| `user_channel_subscriptions` | Per-user channel subscriptions |
 | `videos` | Global YouTube videos |
-| `summaries` | Generated summaries and raw transcript text |
+| `transcripts` | Canonical transcript text and provider metadata |
+| `summaries` | Current generated summary cache, still one row per video |
 | `brain_objects` | Extracted principles, patterns, rules, and playbooks |
 | `user_context` | Single-owner context/preferences |
 | `delivery_log` | Telegram delivery records |
+| `jobs` | Durable queued work with retry and lease state |
 
 Current constraints:
 
-- `channels` are global and not user-owned.
-- `user_context` is global, not per user.
-- Telegram owner binding is single-owner.
-- Queue processing is based on `videos.processed = false`.
-- Queue locking is in-memory, so it does not work across multiple Railway replicas.
-- On-demand `/fetch` can overlap with scheduled work.
-- There is no durable job state, retry metadata, quota, billing, or usage ledger.
+- `summaries` are still global per video; Phase 5 moves personalized outputs to `user_summaries`.
+- Scheduled/RSS processing uses durable jobs, but on-demand `/fetch` still processes directly for fast Telegram feedback.
+- `user_context` remains only as a legacy compatibility table; normal user preferences live in `user_preferences`.
+- There is no quota, billing, or usage ledger yet.
 
 ### Current Queue Behavior
 
 The current scheduler:
 
 - polls RSS every 20 minutes
-- processes queued videos every 5 minutes
-- fetches up to 3 unprocessed videos
-- processes them one by one
+- enqueues pending videos every 5 minutes
+- stores jobs in Postgres with status, attempts, lock owner, lock expiry, and retry metadata
+- lets the worker claim jobs with `FOR UPDATE SKIP LOCKED`
 
-This is acceptable for a private beta, but not enough for 1000 users.
+This is enough for controlled beta processing and prepares the worker path for multiple replicas. The remaining gap is moving on-demand commands and personalized delivery into dedicated job types.
 
 ## Target Architecture
 
@@ -525,13 +527,13 @@ Summary:
 
 | Area | Current | Target |
 |---|---|---|
-| Users | Single owner | Multiuser `users` table |
-| Preferences | Global `user_context` | Per-user `user_preferences` |
-| Channels | Global only | Global channels plus per-user subscriptions |
+| Users | Multiuser `users` table | Multiuser `users` table plus admin tooling |
+| Preferences | Per-user `user_preferences` | Per-user `user_preferences` with delivery modes |
+| Channels | Global channels plus per-user subscriptions | Global channels plus per-user subscriptions |
 | Videos | Global | Global and deduped |
-| Transcripts | Stored in `summaries.raw_transcript` | Canonical `transcripts` table |
+| Transcripts | Canonical `transcripts` table | Canonical `transcripts` table with usage accounting |
 | Summaries | One summary per video | One personalized summary per user/video |
-| Queue | `videos.processed=false` plus in-memory lock | Durable `jobs` table with row locks |
+| Queue | Durable `jobs` table for scheduled processing | Dedicated job types for transcript, summary, delivery, and extraction |
 | Workers | One app process | Horizontally scalable workers |
 | Audio | Temp `/tmp` in app container | Same, with queue limits and cleanup tracking |
 | Cost tracking | None | `usage_events` and quotas |

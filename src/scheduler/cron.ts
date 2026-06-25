@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { supabase } from "../db/supabase.js";
 import { pollAllChannels } from "../services/rss.js";
-import { getTranscriptForVideo } from "../services/transcript.js";
+import { getOrCreateTranscriptForVideo } from "../services/transcript.js";
 import { classifyVideo } from "../services/classifier.js";
 import { generateSummary } from "../services/summarizer.js";
 import { extractBrainObjects } from "../services/brain-extractor.js";
@@ -49,7 +49,7 @@ export async function processVideo(
   const defaultCategory = (channel as Channel | null)?.default_category ?? null;
 
   // 1. Fetch transcript
-  const transcript = await getTranscriptForVideo(video.youtube_video_id, video.id);
+  const transcript = await getOrCreateTranscriptForVideo(video);
   if (!transcript) {
     await supabase.from("videos").update({ processed: true }).eq("id", video.id);
     if (shouldNotifyOnFailure) {
@@ -62,7 +62,7 @@ export async function processVideo(
   const category = await classifyVideo(
     video.title,
     channelName,
-    transcript.slice(0, 2000),
+    transcript.text.slice(0, 2000),
     defaultCategory
   );
 
@@ -72,7 +72,7 @@ export async function processVideo(
   // 3. Generate summary (Pass 1)
   const summaryData = await generateSummary(
     video.id,
-    transcript,
+    transcript.text,
     category,
     video.title,
     channelName,
@@ -125,7 +125,7 @@ export async function processVideo(
     category === "podcast_interview" && podcastBrainTopics.test(video.title);
 
   if (shouldExtractBrain || isPodcastWithBrainValue) {
-    extractBrainObjects(video.id, transcript, video.title, channelName, category)
+    extractBrainObjects(video.id, transcript.text, video.title, channelName, category)
       .then((count) => {
         if (count > 0) {
           notify(`🧠 ${count} brain objects extracted from "${video.title}"`);
