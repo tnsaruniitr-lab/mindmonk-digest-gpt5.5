@@ -1,8 +1,8 @@
-# Codex vs Claude Build Usage Comparison
+# Codex vs Claude vs GLM Build Usage Comparison
 
-This document records the MindMonk build usage comparison between Codex `gpt-5.5` and Claude Code Opus 4.8.
+This document records the MindMonk build usage comparison between Codex `gpt-5.5`, Claude Code Opus 4.8, and the single available GLM-5.2/ZCode snapshot.
 
-The Claude numbers are dev-only and exclude the separate public-repositories engineering audit. The Codex numbers are from the local Codex session logs for this project.
+The Claude numbers are dev-only and exclude the separate public-repositories engineering audit. The Codex numbers are from the local Codex session logs for this project. GLM-5.2 currently has one provided project snapshot only, so it is shown separately and not as a two-snapshot trend.
 
 ## Summary
 
@@ -18,6 +18,67 @@ The Claude numbers are dev-only and exclude the separate public-repositories eng
 | Current blended cost / 1M tokens | ~$0.80 | ~$0.98 | 1.23x |
 
 Clean read: at matched snapshots, Claude is about 2.4x earlier and 2.5x current cost versus Codex. The difference is roughly from about 2x more tokens plus about 1.2x higher blended cost per token.
+
+## GLM-5.2 Single Available Snapshot
+
+GLM-5.2/ZCode has one provided project snapshot, from a single-thread Python implementation. It had no subagents or parallel fan-out. The table below uses the GLM snapshot supplied for this project and compares it with the current Codex and Claude baselines already used in this document.
+
+### Tokens
+
+| Metric | GLM-5.2 ZCode | Codex gpt-5.5 Current | Claude Opus 4.8 Dev Current |
+|---|---:|---:|---:|
+| Input tokens | 89,834,849 | 109,200,611 | 223,307,503 |
+| Cached input tokens | 75,850,368 | 104,683,776 | 209,343,549 |
+| Cached input share | 84.4% | 95.9% | 93.7% |
+| Uncached input tokens | 13,984,481 | 4,516,835 | 13,963,954 |
+| Uncached input share | 15.6% | 4.1% | 6.3% |
+| Output tokens | 219,690 | 428,527 | 1,203,110 |
+| Total tokens | 90,054,539 | 109,629,138 | 224,510,613 |
+| Model/API calls | 611 | n/a | n/a |
+| Total tokens vs GLM | 1.00x | 1.22x | 2.49x |
+
+Readout: GLM-5.2 is the most token-frugal of the three in this supplied snapshot: about 18% fewer total tokens than current Codex and about 60% fewer than current Claude.
+
+### Cost
+
+| Metric | GLM-5.2 ZCode | Codex gpt-5.5 Current | Claude Opus 4.8 Dev Current |
+|---|---:|---:|---:|
+| API-equivalent cost | ~$37.49 / ¥269.73 | ~$87.78 | ~$220.91 |
+| Blended cost / 1M tokens | ~$0.416 | ~$0.80 | ~$0.98 |
+| Cost vs GLM | 1.00x | 2.34x | 5.89x |
+
+Readout: GLM-5.2 is the lowest-cost snapshot: less than half the Codex current cost and about one-sixth of the Claude current cost. The supplied GLM rate card was ¥8/¥2/¥28 per 1M input/cached/output tokens, roughly `$1.11/$0.28/$3.89`.
+
+### Runtime
+
+| Metric | GLM-5.2 ZCode | Codex gpt-5.5 Current | Claude Opus 4.8 Dev Current |
+|---|---:|---:|---:|
+| Wall-clock span | ~22.74h | ~22h 14m | n/a |
+| Summed model runtime | ~3h 00m | ~4h 11m | ~4h 22m |
+| Turn runtime | ~280m | n/a | n/a |
+| Tool calls | 550 / ~72m runtime | 1,033 | n/a |
+| Subagents | 0 / serial | 0 | 69 runs / ~2h 44m summed |
+| Commits | 18 | 24 | n/a |
+
+Readout: GLM-5.2 was serial and had no subagent fan-out, but still had the lowest supplied summed model runtime among the three current baselines.
+
+### Codebase Size
+
+| Metric | GLM-5.2 Python | Codex TypeScript Current | Claude TypeScript Current |
+|---|---:|---:|---:|
+| Source files | 14 | 50 | 39 |
+| Source LOC | 2,434 | 6,476 | 2,486 |
+| Test files | 0 | 0 | 7 |
+| Test LOC | 0 | 0 | 304 |
+| Docs (`.md`) files | 1 | 6 | 8 |
+| Docs LOC | 174 | 2,283 | 2,924 |
+| Landing files | 3 / 673 LOC | n/a | n/a |
+| DB tables | 1 | 12 | 12 |
+| Runtime dependencies | 10 | 10 | 8 |
+| Total files | 27 | 61 | 63 |
+| Commits | 18 | 24 | n/a |
+
+Readout: GLM-5.2 produced the smallest repo footprint by file count. It also has a much smaller DB schema in the supplied snapshot: 1 table versus 12 in the current Codex and Claude baselines.
 
 ## Earlier Snapshot
 
@@ -169,6 +230,7 @@ Claude cost uses Opus 4.8 standard rates from the reconciliation: fresh input at
 ## Caveats
 
 - Claude dev-only excludes the public repositories engineering audit.
+- GLM-5.2 currently has one supplied project snapshot only, so it is not included in the two-snapshot Codex/Claude trend tables.
 - Claude Thread B audit/dev split is time-based, so treat the split as approximate near the boundary.
 - The two systems did overlapping but not identical work. Claude included large spec/doc workflows and hardening/multi-tenant dev; Codex included the build and later production implementation phases in this repo.
 - Current snapshots can drift if more work is done in either thread after this document.
