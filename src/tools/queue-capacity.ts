@@ -103,10 +103,10 @@ async function main(): Promise<number> {
             jsonb_build_object(
               'videoId', '00000000-0000-0000-0000-000000000000',
               'synthetic', true,
-              'runId', $2,
+              'runId', $2::text,
               'index', payloads.index
             ),
-            'scale_test:' || $2 || ':' || payloads.index,
+            'scale_test:' || $2::text || ':' || payloads.index,
             9999,
             1,
             payloads.run_after
