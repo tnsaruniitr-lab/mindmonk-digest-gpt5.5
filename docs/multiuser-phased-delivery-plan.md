@@ -148,7 +148,7 @@ The waterfall must be canonical per video. If 200 users ask for the same video, 
 | 0 | Mostly implemented | `/health`, `/ready`, env validation, production docs, and schema assumptions exist. DB backup verification remains operational. |
 | 1 | Implemented | `users`, `user_preferences`, per-user command routing, and legacy owner migration exist. |
 | 2 | Implemented | `user_channel_subscriptions`, per-user add/list/remove, shared channels/videos, and subscriber lookup exist. |
-| 3 | Partially implemented | Durable `jobs` table, row locks, retries, leases, and worker loop exist. Job decomposition is still coarse: `process_video` rather than separate transcript/summary/delivery jobs. |
+| 3 | Implemented | Durable `jobs` table, row locks, retries, leases, worker loop, and decomposed transcript/summary/delivery/extraction jobs exist. Load testing remains. |
 | 4 | Implemented | Canonical `transcripts` table exists and is reused per video/language. |
 | 5 | Mostly implemented | `user_summaries`, per-user cached summaries, `/reprocess`, and delivery logs exist. Daily digest batching remains future work. |
 | 6 | Implemented | `usage_events`, `/usage`, plan limits, manual fetch/channel guards, global caps, and cost/token recording exist. |

@@ -1,13 +1,14 @@
 import type { Context } from "telegraf";
 import { config } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
-import { enqueueProcessVideoJob } from "../../jobs/queue.js";
+import { enqueueGenerateUserSummaryJob } from "../../jobs/queue.js";
 import { formatSummary } from "../formatter.js";
 import { processVideo } from "../../scheduler/cron.js";
 import { getOutputFormat } from "../../services/preferences.js";
 import { loadStoredSummary } from "../../services/summarizer.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
 import {
+  evaluateActiveJobQuota,
   evaluateManualFetchQuota,
   recordManualFetch,
 } from "../../services/usage.js";
@@ -127,6 +128,12 @@ export async function summarizeVideoById(
         return;
       }
 
+      const activeJobs = await evaluateActiveJobQuota(user as User);
+      if (!activeJobs.allowed) {
+        await ctx.reply(`🚧 ${activeJobs.reason}`);
+        return;
+      }
+
       await recordManualFetch(userId, video.id, {
         youtube_video_id: video.youtube_video_id,
         title: video.title,
@@ -136,9 +143,10 @@ export async function summarizeVideoById(
 
   if (config.SERVICE_ROLE === "web") {
     const telegramChatId = ctx.chat?.id ? String(ctx.chat.id) : null;
-    const job = await enqueueProcessVideoJob(video.id, 50, {
+    const job = await enqueueGenerateUserSummaryJob(video.id, {
       userId: userId ?? null,
       telegramChatId,
+      priority: 50,
     });
 
     if (!job) {

@@ -49,6 +49,10 @@ JOB_POLL_INTERVAL_SECONDS=10
 JOB_LOCK_SECONDS=900
 JOB_RETRY_BASE_SECONDS=60
 MAX_VIDEO_PROCESSING_CONCURRENCY=1
+MAX_TRANSCRIPT_CONCURRENCY=2
+MAX_SUMMARY_CONCURRENCY=3
+MAX_DELIVERY_CONCURRENCY=10
+MAX_EXTRACTION_CONCURRENCY=1
 GROQ_API_KEY=
 GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
 GROQ_TRANSCRIPTION_COST_PER_MINUTE_USD=0
@@ -79,7 +83,7 @@ The grader LLM fields are optional. Leave them blank to use the main summarizer'
 
 The OpenAI/Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `AUDIO_TRANSCRIPTION_PROVIDERS` is a comma-separated order such as `openai,groq`; use `openai` alone if you want to avoid Groq entirely. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`. Audio is chunked before upload so provider rate limits can be retried chunk by chunk. The transcription cost values are estimates used for stored transcript metadata and future quota reporting.
 
-The job worker fields control the durable Postgres-backed queue. Keep `MAX_VIDEO_PROCESSING_CONCURRENCY=1` until the proxy, OpenAI, Anthropic, and Railway CPU limits have been measured under load.
+The job worker fields control the durable Postgres-backed queue. The scale path decomposes work into `fetch_transcript`, `generate_user_summary`, `deliver_summary`, and `extract_brain_objects` jobs. Keep the transcript and summary concurrency low until the proxy, OpenAI, Anthropic, and Railway CPU limits have been measured under load.
 
 The quota fields protect the expensive path before adding more users. Free users default to 3 tracked channels, 5 manual fetches per month, and 60-minute videos. Beta users default to 20 channels, 100 manual fetches per month, and 180-minute videos. The global caps pause new transcription or LLM work once daily usage crosses the configured safety limits.
 

@@ -140,8 +140,10 @@ The current scheduler:
 - enqueues pending videos every 5 minutes
 - stores jobs in Postgres with status, attempts, lock owner, lock expiry, and retry metadata
 - lets the worker claim jobs with `FOR UPDATE SKIP LOCKED`
+- decomposes the heavy path into `fetch_transcript`, `generate_user_summary`, `deliver_summary`, and `extract_brain_objects`
+- applies separate worker concurrency limits for transcript, summary, delivery, and extraction jobs
 
-This is enough for controlled beta processing and prepares the worker path for multiple replicas. The remaining gap is moving on-demand commands and personalized delivery into dedicated job types.
+This is enough for controlled beta processing and prepares the worker path for multiple replicas. The remaining gap is proving these limits under load and wiring production alerts.
 
 ## Target Architecture
 
@@ -534,9 +536,9 @@ Summary:
 | Preferences | Per-user `user_preferences` | Per-user `user_preferences` with delivery modes |
 | Channels | Global channels plus per-user subscriptions | Global channels plus per-user subscriptions |
 | Videos | Global | Global and deduped |
-| Transcripts | Canonical `transcripts` table with usage accounting | Canonical `transcripts` table plus deeper transcript job decomposition |
-| Summaries | One personalized summary per user/video for user-known paths | Delivery jobs, daily digest, and richer resend controls |
-| Queue | Durable `jobs` table for scheduled processing | Dedicated job types for transcript, summary, delivery, and extraction |
+| Transcripts | Canonical `transcripts` table with usage accounting | Same, with load-tested transcript concurrency |
+| Summaries | One personalized summary per user/video for user-known paths | Daily digest and richer resend controls |
+| Queue | Dedicated transcript, summary, delivery, and extraction jobs | Same, with load-tested workers and alerting |
 | Workers | One app process | Horizontally scalable workers |
 | Audio | Temp `/tmp` in app container | Same, with queue limits and cleanup tracking |
 | Cost tracking | `usage_events`, `/usage`, plan limits, global caps | Billing-grade usage windows and paid plans |

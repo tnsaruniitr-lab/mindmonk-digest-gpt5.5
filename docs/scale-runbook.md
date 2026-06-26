@@ -47,6 +47,16 @@ Global daily caps:
 | LLM tokens | `GLOBAL_DAILY_LLM_TOKENS_CAP` |
 | Estimated cost | `GLOBAL_DAILY_ESTIMATED_COST_CAP_USD` |
 
+Worker concurrency:
+
+| Resource | Env | Starting Value |
+|---|---|---:|
+| Legacy wrapper | `MAX_VIDEO_PROCESSING_CONCURRENCY` | 1 |
+| Transcript/audio | `MAX_TRANSCRIPT_CONCURRENCY` | 2 |
+| Summary LLM | `MAX_SUMMARY_CONCURRENCY` | 3 |
+| Telegram delivery | `MAX_DELIVERY_CONCURRENCY` | 10 |
+| Brain extraction | `MAX_EXTRACTION_CONCURRENCY` | 1 |
+
 ## UAT Checklist
 
 - New user can send `/start`.

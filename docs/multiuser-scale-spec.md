@@ -23,7 +23,7 @@ The scaled version must add multi-tenant ownership, dedupe, quotas, reliable que
 The current implementation is good for a small private beta, but still needs load testing and operational hardening before 1000 users.
 
 - Multiuser identity, preferences, subscriptions, canonical transcripts, per-user summaries, durable jobs, and usage events exist.
-- The queue currently has a coarse `process_video` job type. It has row locks, retries, leases, and idempotency, but not separate transcript/summary/delivery job types yet.
+- The queue has row locks, retries, leases, idempotency, and separate transcript, summary, delivery, and extraction job types.
 - Raw audio is downloaded into the Railway container `/tmp` and deleted after transcription.
 - `SERVICE_ROLE=web` queues manual fetches, but `SERVICE_ROLE=all` still allows direct processing for private-beta simplicity.
 - Plan limits, `/usage`, global caps, `/ready`, `/metrics`, and `scale:check` exist, but they are not a replacement for billing-grade quota windows and alerting.

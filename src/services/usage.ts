@@ -224,6 +224,33 @@ export async function evaluateManualFetchQuota(
   return { allowed: true };
 }
 
+export async function evaluateActiveJobQuota(
+  user: Pick<User, "id" | "plan">
+): Promise<QuotaDecision> {
+  const limits = getPlanLimits(user.plan);
+  if (limits.unrestricted) return { allowed: true };
+
+  const result = await dbQuery<{ count: number }>(
+    `
+      SELECT COUNT(*)::int AS count
+      FROM jobs
+      WHERE status IN ('queued', 'processing')
+        AND payload->>'userId' = $1
+    `,
+    [user.id]
+  );
+
+  const active = result.rows[0]?.count ?? 0;
+  if (active >= limits.maxActiveJobs) {
+    return {
+      allowed: false,
+      reason: `You already have ${active}/${limits.maxActiveJobs} active job(s). Wait for one to finish before starting another.`,
+    };
+  }
+
+  return { allowed: true };
+}
+
 export async function recordManualFetch(
   userId: string,
   videoId?: string | null,
@@ -350,9 +377,19 @@ export async function buildUsageReport(user: Pick<User, "id" | "plan">): Promise
   const limits = getPlanLimits(user.plan);
   const monthly = await loadUsageTotals(user.id, startOfUtcMonth());
   const dailyGlobal = await loadUsageTotals(null, startOfUtcDay());
+  const activeJobs = await dbQuery<{ count: number }>(
+    `
+      SELECT COUNT(*)::int AS count
+      FROM jobs
+      WHERE status IN ('queued', 'processing')
+        AND payload->>'userId' = $1
+    `,
+    [user.id]
+  );
 
   const fetchLimit = limits.unrestricted ? "unlimited" : String(limits.manualFetchesPerMonth);
   const channelLimit = limits.unrestricted ? "unlimited" : String(limits.channelLimit);
+  const activeLimit = limits.unrestricted ? "unlimited" : String(limits.maxActiveJobs);
   const maxVideo = `${limits.maxVideoMinutes} min`;
 
   return [
@@ -361,6 +398,7 @@ export async function buildUsageReport(user: Pick<User, "id" | "plan">): Promise
     `Plan: ${limits.plan}`,
     `Manual fetches this month: ${monthly.manualFetches}/${fetchLimit}`,
     `Tracked channel limit: ${channelLimit}`,
+    `Active jobs: ${activeJobs.rows[0]?.count ?? 0}/${activeLimit}`,
     `Max video length: ${maxVideo}`,
     `Your transcription: ${round(monthly.transcriptionMinutes)} min`,
     `Your LLM tokens: ${Math.round(monthly.llmTokens).toLocaleString("en-US")}`,

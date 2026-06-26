@@ -88,6 +88,24 @@ export async function deliverSummaryToChat(
   }
 }
 
+export async function sendPlainTextToChat(
+  telegramChatId: string,
+  text: string
+): Promise<boolean> {
+  if (!botInstance) {
+    log.error("delivery", "Bot not initialized");
+    return false;
+  }
+
+  try {
+    await botInstance.telegram.sendMessage(telegramChatId, text);
+    return true;
+  } catch (err) {
+    log.error("delivery", `Failed to send plain text to chat ${telegramChatId}`, err);
+    return false;
+  }
+}
+
 /**
  * Send a plain text notification to the user.
  */

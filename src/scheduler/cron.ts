@@ -7,7 +7,7 @@ import { generateSummary, loadStoredSummary } from "../services/summarizer.js";
 import { extractBrainObjects } from "../services/brain-extractor.js";
 import { deliverSummary, deliverSummaryToChat, notify } from "../services/delivery.js";
 import { loadActiveSubscribers } from "../services/users.js";
-import { enqueueProcessVideoJob, getJobCounts } from "../jobs/queue.js";
+import { enqueueFetchTranscriptJob, getJobCounts } from "../jobs/queue.js";
 import type { Video, Channel, Summary, UserSummary } from "../types/index.js";
 import type { Category } from "../types/index.js";
 import { log } from "../utils/logger.js";
@@ -212,7 +212,7 @@ async function enqueuePendingVideos(): Promise<void> {
 
     for (const video of videos as Video[]) {
       try {
-        const job = await enqueueProcessVideoJob(video.id);
+        const job = await enqueueFetchTranscriptJob(video.id);
         if (job) enqueued++;
       } catch (err) {
         log.error("cron", `Failed to enqueue "${video.title}"`, err);

@@ -4,7 +4,12 @@ import { dbQuery } from "../db/supabase.js";
 import { log } from "../utils/logger.js";
 
 export type JobStatus = "queued" | "processing" | "succeeded" | "failed" | "dead";
-export type JobType = "process_video";
+export type JobType =
+  | "process_video"
+  | "fetch_transcript"
+  | "generate_user_summary"
+  | "deliver_summary"
+  | "extract_brain_objects";
 
 export interface Job<TPayload = any> {
   id: string;
@@ -27,6 +32,26 @@ export interface ProcessVideoJobPayload {
   videoId: string;
   userId?: string | null;
   telegramChatId?: string | null;
+}
+
+export interface FetchTranscriptJobPayload {
+  videoId: string;
+}
+
+export interface GenerateUserSummaryJobPayload {
+  videoId: string;
+  userId?: string | null;
+  telegramChatId?: string | null;
+}
+
+export interface DeliverSummaryJobPayload {
+  videoId: string;
+  userId?: string | null;
+  telegramChatId?: string | null;
+}
+
+export interface ExtractBrainObjectsJobPayload {
+  videoId: string;
 }
 
 export const workerId = `worker-${randomUUID()}`;
@@ -107,7 +132,93 @@ export async function enqueueProcessVideoJob(
   );
 }
 
-export async function claimNextJob(): Promise<Job | null> {
+export async function enqueueFetchTranscriptJob(
+  videoId: string,
+  priority = 100
+): Promise<Job | null> {
+  return enqueueJob(
+    "fetch_transcript",
+    { videoId } satisfies FetchTranscriptJobPayload,
+    {
+      idempotencyKey: `fetch_transcript:${videoId}`,
+      priority,
+      maxAttempts: 5,
+    }
+  );
+}
+
+export async function enqueueGenerateUserSummaryJob(
+  videoId: string,
+  options: {
+    userId?: string | null;
+    telegramChatId?: string | null;
+    priority?: number;
+    runAfter?: Date;
+  } = {}
+): Promise<Job | null> {
+  const userKey = options.userId ?? "global";
+  return enqueueJob(
+    "generate_user_summary",
+    {
+      videoId,
+      userId: options.userId ?? null,
+      telegramChatId: options.telegramChatId ?? null,
+    } satisfies GenerateUserSummaryJobPayload,
+    {
+      idempotencyKey: `generate_user_summary:${videoId}:${userKey}`,
+      priority: options.priority ?? 80,
+      maxAttempts: 8,
+      runAfter: options.runAfter,
+    }
+  );
+}
+
+export async function enqueueDeliverSummaryJob(
+  videoId: string,
+  options: {
+    userId?: string | null;
+    telegramChatId?: string | null;
+    priority?: number;
+  } = {}
+): Promise<Job | null> {
+  const userKey = options.userId ?? "global";
+  return enqueueJob(
+    "deliver_summary",
+    {
+      videoId,
+      userId: options.userId ?? null,
+      telegramChatId: options.telegramChatId ?? null,
+    } satisfies DeliverSummaryJobPayload,
+    {
+      idempotencyKey: `deliver_summary:${videoId}:${userKey}:${options.telegramChatId ?? "owner"}`,
+      priority: options.priority ?? 70,
+      maxAttempts: 8,
+    }
+  );
+}
+
+export async function enqueueExtractBrainObjectsJob(
+  videoId: string,
+  priority = 120
+): Promise<Job | null> {
+  return enqueueJob(
+    "extract_brain_objects",
+    { videoId } satisfies ExtractBrainObjectsJobPayload,
+    {
+      idempotencyKey: `extract_brain_objects:${videoId}`,
+      priority,
+      maxAttempts: 3,
+    }
+  );
+}
+
+export async function claimNextJob(types?: JobType[]): Promise<Job | null> {
+  const typeFilter = types?.length
+    ? "AND type = ANY($3::text[])"
+    : "";
+  const params: unknown[] = [workerId, config.JOB_LOCK_SECONDS];
+  if (types?.length) params.push(types);
+
   const result = await dbQuery<Job>(
     `
       WITH next_job AS (
@@ -115,13 +226,16 @@ export async function claimNextJob(): Promise<Job | null> {
         FROM jobs
         WHERE
           (
-            status = 'queued'
-            AND run_after <= now()
+            (
+              status = 'queued'
+              AND run_after <= now()
+            )
+            OR (
+              status = 'processing'
+              AND locked_until < now()
+            )
           )
-          OR (
-            status = 'processing'
-            AND locked_until < now()
-          )
+          ${typeFilter}
         ORDER BY priority ASC, created_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
@@ -136,7 +250,7 @@ export async function claimNextJob(): Promise<Job | null> {
       WHERE id = (SELECT id FROM next_job)
       RETURNING *
     `,
-    [workerId, config.JOB_LOCK_SECONDS]
+    params
   );
 
   return result.rows[0] ?? null;
