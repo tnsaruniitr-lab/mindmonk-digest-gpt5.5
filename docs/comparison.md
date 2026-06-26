@@ -12,6 +12,8 @@ The Claude numbers are dev-only and exclude the separate public-repositories eng
 | Current snapshot cost | ~$87.78 | ~$220.91 | 2.52x |
 | Earlier snapshot tokens | 73.2M | 150.8M | 2.06x |
 | Current snapshot tokens | 109.6M | 224.5M | 2.05x |
+| Earlier main-thread runtime | ~2h 39m | ~2h 40m | ~1.0x |
+| Current main-thread runtime | ~4h 11m | ~4h 22m | ~1.04x |
 | Earlier blended cost / 1M tokens | ~$0.81 | ~$0.94 | 1.16x |
 | Current blended cost / 1M tokens | ~$0.80 | ~$0.98 | 1.23x |
 
@@ -50,6 +52,20 @@ At the earlier cutoff, Claude Thread B hardening dev had not started yet, so Cla
 | Total token increase | +36,399,870 | +73,727,779 |
 | Cost increase | +$28.32 | +$79.58 |
 | Main reason | Continued implementation in Codex | Spec/doc workflows plus hardening and multi-tenant dev |
+
+## Runtime Comparison
+
+The main-thread runtime is the most honest like-for-like comparison: one agent turn stream from trigger to reply, excluding Claude's parallel subagent fan-out. Claude's main-thread value is end-to-end including network/streaming overhead; Codex's value is parsed from model/runtime logs and is closer to pure model response runtime.
+
+| Runtime Metric | Earlier Snapshot | Current Snapshot |
+|---|---:|---:|
+| Codex model runtime | ~2h 39m | ~4h 11m |
+| Claude main-thread runtime | ~2h 40m | ~4h 22m |
+| Difference, Claude minus Codex | ~+1m | ~+11m |
+| Claude subagent runs, summed | ~1h 05m / 43 runs | ~2h 44m / 69 runs |
+| Claude total agent runtime, main + subagents | ~3h 45m | ~7h 06m |
+
+Readout: main-thread runtime is very close between the two systems. Claude's extra runtime is mostly parallel subagent work from spec/doc/hardening workflows. The subagent row is summed agent-seconds; because those agents can run concurrently, it is not the same as wall-clock waiting time.
 
 ## Claude Dev-Only Breakdown
 
