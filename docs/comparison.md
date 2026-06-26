@@ -67,6 +67,54 @@ The main-thread runtime is the most honest like-for-like comparison: one agent t
 
 Readout: main-thread runtime is very close between the two systems. Claude's extra runtime is mostly parallel subagent work from spec/doc/hardening workflows. The subagent row is summed agent-seconds; because those agents can run concurrently, it is not the same as wall-clock waiting time.
 
+## Codebase Size Comparison
+
+Codex codebase size was computed from tracked Git files in this repository. Claude codebase size uses the provided `mindmonk-digest-claude4.8opus` metrics. LOC is raw line count, so it includes comments and blank lines.
+
+### Codex Codebase Size - `mindmonk-digest-gpt5.5`
+
+| Metric | Earlier (`e88d8a8`) | Current (`c07a4ea`) | Delta |
+|---|---:|---:|---:|
+| TypeScript source files | 46 | 50 | +4 |
+| TypeScript source LOC | 5,284 | 6,476 | +1,192 |
+| Test files | 0 | 0 | 0 |
+| Test LOC | 0 | 0 | 0 |
+| DB tables | 6 | 12 | +6 |
+| Docs (`.md`) files | 1 | 6 | +5 |
+| Docs LOC | 170 | 2,283 | +2,113 |
+| Runtime dependencies | 10 | 10 | 0 |
+| Total files in repo | 52 | 61 | +9 |
+
+### Claude Codebase Size - `mindmonk-digest-claude4.8opus`
+
+| Metric | Earlier (`8c91e8b`) | Current Working Tree | Delta |
+|---|---:|---:|---:|
+| TypeScript source files | 29 | 39 | +10 |
+| TypeScript source LOC | 1,609 | 2,486 | +877 |
+| Test files | 0 | 7 | +7 |
+| Test LOC | 0 | 304 | +304 |
+| DB tables | 6 | 12 | +6 |
+| Docs (`.md`) files | 1 | 8 | +7 |
+| Docs LOC | 96 | 2,924 | +2,828 |
+| Runtime dependencies | 8 | 8 | 0 |
+| Total files in repo | 38 | 63 | +25 |
+
+### Current Snapshot Size Side-By-Side
+
+| Metric | Codex Current | Claude Current | Readout |
+|---|---:|---:|---|
+| TypeScript source files | 50 | 39 | Codex has more app source files |
+| TypeScript source LOC | 6,476 | 2,486 | Codex has more source LOC in this repo snapshot |
+| Test files | 0 | 7 | Claude added tests; Codex has not yet added tests |
+| Test LOC | 0 | 304 | Claude has test coverage started |
+| DB tables | 12 | 12 | Same table count at current snapshot |
+| Docs (`.md`) files | 6 | 8 | Claude has two more docs files |
+| Docs LOC | 2,283 | 2,924 | Claude has more planning/docs LOC |
+| Runtime dependencies | 10 | 8 | Codex has two more runtime dependencies |
+| Total files in repo | 61 | 63 | Similar total file count |
+
+Readout: Claude's largest codebase delta came from docs, tests, and multi-tenant/hardening files. Codex's current repo is larger in TypeScript LOC, but Claude has more test files and docs LOC at the compared current snapshot.
+
 ## Claude Dev-Only Breakdown
 
 | Claude Scope | Earlier Snapshot | Current Snapshot |
