@@ -132,6 +132,27 @@ Readout: main-thread runtime is very close between the two systems. Claude's ext
 
 Codex codebase size was computed from tracked Git files in this repository. Claude codebase size uses the provided `mindmonk-digest-claude4.8opus` metrics. Raw LOC includes comments and blank lines. SLOC/non-blank LOC counts only lines with non-whitespace text.
 
+### Snapshot 1 Size Side-By-Side - All Three
+
+This is the clean Snapshot 1 codebase-size comparison across Codex, Claude, and GLM-5.2. GLM used Python while Codex and Claude used TypeScript, so raw source LOC is useful as a footprint signal but not a perfect productivity metric across languages. Non-blank SLOC is the stronger headline metric where it is available.
+
+| Metric | Codex S1 | Claude S1 | GLM-5.2 S1 | Readout |
+|---|---:|---:|---:|---|
+| Source language | TypeScript | TypeScript | Python | GLM is cross-language versus the TypeScript repos |
+| Source files | 46 | 29 | 14 | GLM has the smallest source file count |
+| Source LOC, raw | 5,284 | 1,609 | 2,434 | Codex is largest; GLM sits between Codex and Claude |
+| Source SLOC, non-blank | 4,485 | 1,443 | n/a | GLM non-blank source SLOC was not provided |
+| Test files | 0 | 0 | 0 | No tests in Snapshot 1 for any build |
+| Test LOC | 0 | 0 | 0 | No test LOC in Snapshot 1 |
+| DB tables | 6 | 6 | 1 | GLM had the simplest schema |
+| Docs (`.md`) files | 1 | 1 | 1 | Same doc file count |
+| Docs LOC, raw | 170 | 96 | 174 | Similar docs footprint in Snapshot 1 |
+| Docs LOC, non-blank | 127 | 73 | n/a | GLM non-blank docs LOC was not provided |
+| Landing files | n/a | n/a | 3 / 673 LOC | GLM separately counted landing-page files |
+| Runtime dependencies | 10 | 8 | 10 | Codex and GLM had the same runtime dependency count |
+| Total files in repo | 52 | 38 | 27 | GLM had the smallest total repo footprint |
+| Commits | 17 | n/a | 18 | Codex and GLM had similar commit counts; Claude S1 commit count was not provided |
+
 ### Codex Codebase Size - `mindmonk-digest-gpt5.5`
 
 | Metric | Earlier (`e88d8a8`) | Current (`c07a4ea`) | Delta |
