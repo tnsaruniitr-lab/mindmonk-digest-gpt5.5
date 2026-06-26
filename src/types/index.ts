@@ -151,6 +151,28 @@ export interface UserContext {
   created_at: string;
 }
 
+export type UsageEventType =
+  | "manual_fetch"
+  | "auto_digest"
+  | "transcription_minutes"
+  | "proxy_mb"
+  | "llm_tokens"
+  | "expensive_failure";
+
+export interface UsageEvent {
+  id: string;
+  user_id: string | null;
+  job_id: string | null;
+  video_id: string | null;
+  event_type: UsageEventType;
+  provider: string | null;
+  quantity: string | number;
+  unit: string;
+  estimated_cost_usd: string | number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 // --- Zod schemas for Claude JSON output validation ---
 export const SummaryResponseSchema = z.object({
   tldr: z.string(),

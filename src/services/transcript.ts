@@ -4,6 +4,10 @@ import { supabase } from "../db/supabase.js";
 import type { Transcript, Video } from "../types/index.js";
 import { log } from "../utils/logger.js";
 import { fetchAudioTranscript } from "./audio-transcription.js";
+import {
+  recordTranscriptionUsage,
+  type UsageContext,
+} from "./usage.js";
 
 interface TranscriptFetchResult {
   text: string;
@@ -25,7 +29,8 @@ type VideoForTranscript = Pick<
  */
 export async function fetchTranscript(
   videoId: string,
-  durationSeconds?: number | null
+  durationSeconds?: number | null,
+  context: UsageContext = {}
 ): Promise<TranscriptFetchResult | null> {
   try {
     const segments = await ytFetch(videoId, { lang: "en" });
@@ -58,8 +63,19 @@ export async function fetchTranscript(
     log.warn("transcript", `Caption transcript failed for ${videoId}: ${err}`);
   }
 
-  const audioTranscript = await fetchAudioTranscript(videoId, durationSeconds);
+  const audioTranscript = await fetchAudioTranscript(videoId, durationSeconds, context);
   if (!audioTranscript) return null;
+
+  await recordTranscriptionUsage(
+    context,
+    audioTranscript.provider,
+    audioTranscript.durationSeconds,
+    audioTranscript.costUsd,
+    {
+      youtube_video_id: videoId,
+      audio_size_bytes: audioTranscript.audioSizeBytes,
+    }
+  );
 
   return {
     text: audioTranscript.text,
@@ -151,7 +167,8 @@ async function saveTranscript(
  * Return one canonical transcript row for a video and update DB status.
  */
 export async function getOrCreateTranscriptForVideo(
-  video: VideoForTranscript
+  video: VideoForTranscript,
+  context: UsageContext = {}
 ): Promise<Transcript | null> {
   const stored = await loadStoredTranscript(video.id);
   if (stored?.text) {
@@ -170,7 +187,11 @@ export async function getOrCreateTranscriptForVideo(
     }
   }
 
-  const fetched = await fetchTranscript(video.youtube_video_id, video.duration_seconds);
+  const fetched = await fetchTranscript(
+    video.youtube_video_id,
+    video.duration_seconds,
+    { ...context, videoId: context.videoId ?? video.id }
+  );
   if (fetched) {
     const saved = await saveTranscript(video.id, fetched);
     if (saved) {

@@ -109,7 +109,7 @@ async function handleProcessVideo(job: Job<ProcessVideoJobPayload>): Promise<voi
     return;
   }
 
-  const result = await processVideo(typedVideo);
+  const result = await processVideo(typedVideo, { jobId: job.id });
   if (result.status === "summary_failed") {
     throw new Error(`Summary generation failed for video ${videoId}`);
   }

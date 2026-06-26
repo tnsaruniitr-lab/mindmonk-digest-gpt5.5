@@ -3,6 +3,7 @@ import { supabase } from "../../db/supabase.js";
 import { pollChannel } from "../../services/rss.js";
 import { subscribeUserToChannel, upsertChannel } from "../../services/subscriptions.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
+import { evaluateChannelQuota } from "../../services/usage.js";
 import { resolveChannel } from "../../services/youtube.js";
 import type { Channel } from "../../types/index.js";
 import { commandArg, summarizeVideoById } from "./fetch.js";
@@ -36,6 +37,12 @@ export async function channelCommand(ctx: Context): Promise<void> {
   const channel = await getOrCreateChannel(url);
   if (!channel) {
     await ctx.reply("❌ Could not resolve that YouTube channel. Try a /channel URL or @handle URL.");
+    return;
+  }
+
+  const quota = await evaluateChannelQuota(user, channel.id);
+  if (!quota.allowed) {
+    await ctx.reply(`🚧 ${quota.reason}`);
     return;
   }
 

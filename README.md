@@ -30,9 +30,12 @@ TELEGRAM_CHAT_ID=
 TELEGRAM_WEBHOOK_URL=
 TELEGRAM_WEBHOOK_SECRET=
 BOT_MODE=auto
+SERVICE_ROLE=all
 DATABASE_URL=
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-6
+ANTHROPIC_INPUT_COST_PER_MILLION_USD=3
+ANTHROPIC_OUTPUT_COST_PER_MILLION_USD=15
 OPENAI_API_KEY=
 OPENAI_TRANSCRIPTION_MODEL=whisper-1
 OPENAI_TRANSCRIPTION_COST_PER_MINUTE_USD=0.006
@@ -57,6 +60,18 @@ YTDLP_BINARY_PATH=
 GRADER_LLM_BASE_URL=https://api.openai.com/v1
 GRADER_LLM_MODEL=
 GRADER_LLM_API_KEY=
+FREE_CHANNEL_LIMIT=3
+FREE_MANUAL_FETCHES_PER_MONTH=5
+FREE_MAX_VIDEO_MINUTES=60
+FREE_MAX_ACTIVE_JOBS=2
+BETA_CHANNEL_LIMIT=20
+BETA_MANUAL_FETCHES_PER_MONTH=100
+BETA_MAX_VIDEO_MINUTES=180
+BETA_MAX_ACTIVE_JOBS=10
+ADMIN_MAX_VIDEO_MINUTES=240
+GLOBAL_DAILY_TRANSCRIPTION_MINUTES_CAP=600
+GLOBAL_DAILY_LLM_TOKENS_CAP=5000000
+GLOBAL_DAILY_ESTIMATED_COST_CAP_USD=100
 ```
 
 The grader LLM fields are optional. Leave them blank to use the main summarizer's grading. Fill them when you want the "Unbiased grading" section to be produced by a separate model. Do not commit a real API key.
@@ -64,6 +79,8 @@ The grader LLM fields are optional. Leave them blank to use the main summarizer'
 The OpenAI/Groq and `yt-dlp` fields are optional but recommended when you want fallback transcription for videos with disabled captions. `AUDIO_TRANSCRIPTION_PROVIDERS` is a comma-separated order such as `openai,groq`; use `openai` alone if you want to avoid Groq entirely. `YTDLP_PROXY_URL` should be a residential proxy URL stored as a secret, not committed. If `YTDLP_BINARY_PATH` is blank, the app downloads a runtime `yt-dlp` binary into `/tmp`. Audio is chunked before upload so provider rate limits can be retried chunk by chunk. The transcription cost values are estimates used for stored transcript metadata and future quota reporting.
 
 The job worker fields control the durable Postgres-backed queue. Keep `MAX_VIDEO_PROCESSING_CONCURRENCY=1` until the proxy, OpenAI, Anthropic, and Railway CPU limits have been measured under load.
+
+The quota fields protect the expensive path before adding more users. Free users default to 3 tracked channels, 5 manual fetches per month, and 60-minute videos. Beta users default to 20 channels, 100 manual fetches per month, and 180-minute videos. The global caps pause new transcription or LLM work once daily usage crosses the configured safety limits.
 
 3. Install dependencies:
 
@@ -107,6 +124,7 @@ Railway's public URL expects an HTTP listener, so the app starts a small health 
 - `/set_format` - show or set your preferred digest template.
 - `/reprocess <youtube_video_url>` - regenerate a summary.
 - `/status` - show queue and processing stats.
+- `/usage` - show your quota and current usage.
 
 Categories:
 

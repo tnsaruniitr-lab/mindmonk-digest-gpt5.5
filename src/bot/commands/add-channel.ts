@@ -3,6 +3,7 @@ import { resolveChannel } from "../../services/youtube.js";
 import { pollChannel } from "../../services/rss.js";
 import { subscribeUserToChannel, upsertChannel } from "../../services/subscriptions.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
+import { evaluateChannelQuota } from "../../services/usage.js";
 import { categories, type Category, type Channel } from "../../types/index.js";
 import { summarizeVideoById } from "./fetch.js";
 
@@ -42,6 +43,12 @@ export async function addChannelCommand(ctx: Context) {
 
   if (!channel) {
     await ctx.reply("❌ Failed to save channel. Try again.");
+    return;
+  }
+
+  const quota = await evaluateChannelQuota(user, channel.id);
+  if (!quota.allowed) {
+    await ctx.reply(`🚧 ${quota.reason}`);
     return;
   }
 

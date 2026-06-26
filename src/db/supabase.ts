@@ -59,6 +59,7 @@ const allowedTables = new Set([
   "user_context",
   "delivery_log",
   "jobs",
+  "usage_events",
 ]);
 
 function asPgError(err: unknown): SupabaseLikeError {
@@ -656,6 +657,20 @@ export async function ensureDatabaseSchema(): Promise<void> {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS usage_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+      job_id uuid REFERENCES jobs(id) ON DELETE SET NULL,
+      video_id uuid REFERENCES videos(id) ON DELETE SET NULL,
+      event_type text NOT NULL,
+      provider text,
+      quantity numeric(18, 3) NOT NULL DEFAULT 0,
+      unit text NOT NULL,
+      estimated_cost_usd numeric(12, 6),
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
     CREATE INDEX IF NOT EXISTS idx_users_telegram_chat_id ON users(telegram_chat_id);
     CREATE INDEX IF NOT EXISTS idx_user_channel_subscriptions_user_id ON user_channel_subscriptions(user_id);
@@ -675,5 +690,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_jobs_status_run_after ON jobs(status, run_after, priority);
     CREATE INDEX IF NOT EXISTS idx_jobs_locked_until ON jobs(locked_until);
     CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(type);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_user_created ON usage_events(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_type_created ON usage_events(event_type, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_video_id ON usage_events(video_id);
   `);
 }

@@ -14,6 +14,7 @@ export async function helpCommand(ctx: Context) {
       `/channel \\<url\\> — Summarize the latest video from a channel\n` +
       `/digest \\<url\\> — Summarize a single video now\n` +
       `/status — Processing queue stats\n` +
+      `/usage — Show your quota and usage\n` +
       `/brain \\[type\\] — Browse brain objects\n` +
       `/set\\_context \\<label\\> \\<text\\> — Set personal context\n` +
       `/set\\_format — Set your preferred digest template\n` +

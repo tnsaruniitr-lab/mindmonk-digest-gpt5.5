@@ -5,9 +5,13 @@ import { processVideo } from "../../scheduler/cron.js";
 import { getOutputFormat } from "../../services/preferences.js";
 import { loadStoredSummary } from "../../services/summarizer.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
+import {
+  evaluateManualFetchQuota,
+  recordManualFetch,
+} from "../../services/usage.js";
 import { getVideoMetadata } from "../../services/youtube.js";
 import { extractVideoId } from "../../utils/youtube-url.js";
-import type { Summary, UserSummary, Video } from "../../types/index.js";
+import type { Summary, User, UserSummary, Video } from "../../types/index.js";
 
 interface VideoSeed {
   channelId?: string | null;
@@ -105,6 +109,27 @@ export async function summarizeVideoById(
     }
   } else {
     await ctx.reply(`⏳ Processing "${video.title}"...`);
+  }
+
+  if (userId) {
+    const { data: user } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (user) {
+      const decision = await evaluateManualFetchQuota(user as User, video);
+      if (!decision.allowed) {
+        await ctx.reply(`🚧 ${decision.reason}`);
+        return;
+      }
+
+      await recordManualFetch(userId, video.id, {
+        youtube_video_id: video.youtube_video_id,
+        title: video.title,
+      });
+    }
   }
 
   const result = await processVideo(video, {

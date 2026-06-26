@@ -12,6 +12,7 @@ import { categories, type Category, type Channel, type Video } from "../../types
 import { log } from "../../utils/logger.js";
 import { subscribeUserToChannel, upsertChannel } from "../../services/subscriptions.js";
 import { getOrCreateTelegramUser } from "../../services/users.js";
+import { evaluateChannelQuota } from "../../services/usage.js";
 import { summarizeVideoById } from "../commands/fetch.js";
 
 /**
@@ -234,6 +235,12 @@ export async function addChannelCallback(ctx: Context) {
 
   if (!channel) {
     await ctx.editMessageText(`❌ Could not save ${channelName}. Try again.`);
+    return;
+  }
+
+  const quota = await evaluateChannelQuota(user, channel.id);
+  if (!quota.allowed) {
+    await ctx.editMessageText(`🚧 ${quota.reason}`);
     return;
   }
 

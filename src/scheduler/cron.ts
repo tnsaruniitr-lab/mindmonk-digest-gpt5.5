@@ -20,6 +20,7 @@ interface ProcessVideoOptions {
   deliver?: boolean;
   notifyOnFailure?: boolean;
   userId?: string | null;
+  jobId?: string | null;
 }
 
 export interface ProcessVideoResult {
@@ -49,7 +50,11 @@ export async function processVideo(
   const defaultCategory = (channel as Channel | null)?.default_category ?? null;
 
   // 1. Fetch transcript
-  const transcript = await getOrCreateTranscriptForVideo(video);
+  const transcript = await getOrCreateTranscriptForVideo(video, {
+    userId: options.userId ?? null,
+    jobId: options.jobId ?? null,
+    videoId: video.id,
+  });
   if (!transcript) {
     await supabase.from("videos").update({ processed: true }).eq("id", video.id);
     if (shouldNotifyOnFailure) {
@@ -81,7 +86,12 @@ export async function processVideo(
       video.title,
       channelName,
       userId,
-      transcriptRow.id
+      transcriptRow.id,
+      {
+        userId: userId ?? null,
+        jobId: options.jobId ?? null,
+        videoId: video.id,
+      }
     );
 
     if (!summaryData) return null;

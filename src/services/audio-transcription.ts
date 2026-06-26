@@ -7,6 +7,11 @@ import { promisify } from "node:util";
 import ffmpegPath from "ffmpeg-static";
 import { config } from "../config.js";
 import { log } from "../utils/logger.js";
+import {
+  evaluateGlobalBudget,
+  recordProxyUsage,
+  type UsageContext,
+} from "./usage.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_YTDLP_DOWNLOAD_MS = 8 * 60 * 1000;
@@ -27,6 +32,7 @@ export interface AudioTranscriptResult {
   provider: TranscriptionProvider;
   durationSeconds: number | null;
   costUsd: number | null;
+  audioSizeBytes: number | null;
 }
 
 function redactSecrets(text: string): string {
@@ -397,11 +403,21 @@ async function transcribeChunksWithProvider(
 
 export async function fetchAudioTranscript(
   videoId: string,
-  durationSeconds?: number | null
+  durationSeconds?: number | null,
+  context: UsageContext = {}
 ): Promise<AudioTranscriptResult | null> {
   if (!config.TRANSCRIPT_AUDIO_FALLBACK) return null;
   if (!config.YTDLP_PROXY_URL) {
     log.warn("transcript", "Audio fallback skipped: YTDLP_PROXY_URL is not set");
+    return null;
+  }
+
+  const estimatedMinutes = durationSeconds && durationSeconds > 0
+    ? durationSeconds / 60
+    : 60;
+  const budget = await evaluateGlobalBudget("transcription_minutes", estimatedMinutes);
+  if (!budget.allowed) {
+    log.warn("transcript", `Audio fallback skipped: ${budget.reason}`);
     return null;
   }
 
@@ -410,6 +426,7 @@ export async function fetchAudioTranscript(
 
   try {
     const audio = await downloadAudio(videoId, workDir);
+    await recordProxyUsage(context, audio.sizeBytes, { youtube_video_id: videoId });
     const chunks = await splitAudioIfNeeded(audio, workDir);
     const providers = configuredProviders();
     let attemptedProvider = false;
@@ -434,6 +451,7 @@ export async function fetchAudioTranscript(
           provider,
           durationSeconds: estimatedDuration,
           costUsd: estimateCostUsd(provider, estimatedDuration),
+          audioSizeBytes: audio.sizeBytes,
         };
       } catch (err) {
         log.warn("transcript", `${providerSettings.name} audio transcription failed for ${videoId}: ${redactSecrets(String(err))}`);

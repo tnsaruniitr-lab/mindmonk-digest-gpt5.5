@@ -13,6 +13,11 @@ import {
 } from "../types/index.js";
 import { withRetry } from "../utils/retry.js";
 import { log } from "../utils/logger.js";
+import {
+  evaluateGlobalBudget,
+  recordLlmUsage,
+  type UsageContext,
+} from "./usage.js";
 
 let client: Anthropic | null = null;
 
@@ -31,7 +36,8 @@ export async function generateSummary(
   videoTitle: string,
   channelName: string,
   userId?: string | null,
-  transcriptId?: string | null
+  transcriptId?: string | null,
+  usageContext: UsageContext = {}
 ): Promise<SummaryResponse | null> {
   try {
     const preferences = await getUserPreferences(userId);
@@ -44,6 +50,13 @@ export async function generateSummary(
       channelName,
       preferences.outputFormat
     );
+
+    const estimatedTokens = Math.ceil((SUMMARY_SYSTEM_PROMPT.length + userPrompt.length) / 4) + 4096;
+    const budget = await evaluateGlobalBudget("llm_tokens", estimatedTokens);
+    if (!budget.allowed) {
+      log.warn("summarizer", `Skipping summary for "${videoTitle}": ${budget.reason}`);
+      return null;
+    }
 
     const response = await withRetry(
       () =>
@@ -81,8 +94,9 @@ export async function generateSummary(
       summaryData.skip_assessment = externalGrade;
     }
 
-    const tokensUsed =
-      (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
+    const inputTokens = response.usage?.input_tokens ?? 0;
+    const outputTokens = response.usage?.output_tokens ?? 0;
+    const tokensUsed = inputTokens + outputTokens;
 
     const summaryRow = {
       video_id: videoId,
@@ -111,6 +125,17 @@ export async function generateSummary(
     }
 
     log.info("summarizer", `Summary generated for "${videoTitle}" (${tokensUsed} tokens)`);
+    await recordLlmUsage({
+      context: {
+        ...usageContext,
+        userId: usageContext.userId ?? userId ?? null,
+        videoId: usageContext.videoId ?? videoId,
+      },
+      provider: "anthropic",
+      model: config.ANTHROPIC_MODEL,
+      inputTokens,
+      outputTokens,
+    });
     return summaryData;
   } catch (err) {
     log.error("summarizer", `Failed to summarize "${videoTitle}"`, err);
