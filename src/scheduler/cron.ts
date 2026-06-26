@@ -21,6 +21,7 @@ interface ProcessVideoOptions {
   notifyOnFailure?: boolean;
   userId?: string | null;
   jobId?: string | null;
+  telegramChatId?: string | null;
 }
 
 export interface ProcessVideoResult {
@@ -130,7 +131,17 @@ export async function processVideo(
         }
         return { status: "summary_failed", channelName, summary: null };
       }
-      await deliverSummary(video, resultSummary, channelName);
+      if (options.telegramChatId) {
+        await deliverSummaryToChat(
+          video,
+          resultSummary,
+          channelName,
+          options.telegramChatId,
+          options.userId ?? null
+        );
+      } else {
+        await deliverSummary(video, resultSummary, channelName);
+      }
     }
   } else {
     resultSummary = await ensureSummary(options.userId ?? null);

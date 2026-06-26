@@ -29,10 +29,15 @@ const OWNER_CHAT_ID_LABEL = "telegram_owner_chat_id";
 
 const bot = new Telegraf(config.TELEGRAM_BOT_TOKEN);
 setBot(bot);
+const serviceRole = config.SERVICE_ROLE;
+const shouldStartWeb = serviceRole === "all" || serviceRole === "web";
+const shouldStartScheduler = serviceRole === "all" || serviceRole === "scheduler";
+const shouldStartWorker = serviceRole === "all" || serviceRole === "worker";
 const webhookPath = buildWebhookPath();
 const webhookUrl = buildWebhookUrl(webhookPath);
 const shouldUseWebhook =
-  config.BOT_MODE === "webhook" || (config.BOT_MODE === "auto" && Boolean(webhookUrl));
+  shouldStartWeb &&
+  (config.BOT_MODE === "webhook" || (config.BOT_MODE === "auto" && Boolean(webhookUrl)));
 let shuttingDown = false;
 const healthServer = startHealthServer(
   shouldUseWebhook
@@ -110,22 +115,29 @@ function buildWebhookUrl(path: string): string {
 
 async function startBot(): Promise<void> {
   await ensureDatabaseSchema();
-  log.info("db", "Database schema ready");
+  log.info("db", `Database schema ready (role=${serviceRole})`);
   await loadPersistedOwnerChatId();
 
-  if (shouldUseWebhook) {
-    if (!webhookUrl) {
-      throw new Error("BOT_MODE=webhook requires TELEGRAM_WEBHOOK_URL or RAILWAY_PUBLIC_DOMAIN");
-    }
+  if (shouldStartWeb) {
+    if (shouldUseWebhook) {
+      if (!webhookUrl) {
+        throw new Error("BOT_MODE=webhook requires TELEGRAM_WEBHOOK_URL or RAILWAY_PUBLIC_DOMAIN");
+      }
 
-    await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
-    log.info("bot", "Bot started (webhook mode)");
+      await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
+      log.info("bot", "Bot started (webhook mode)");
+    } else {
+      startPollingWithRetry();
+    }
   } else {
-    startPollingWithRetry();
+    log.info("bot", `Telegram listener disabled for role=${serviceRole}`);
   }
 
-  startScheduler();
-  startJobWorker();
+  if (shouldStartScheduler) startScheduler();
+  else log.info("cron", `Scheduler disabled for role=${serviceRole}`);
+
+  if (shouldStartWorker) startJobWorker();
+  else log.info("jobs", `Worker disabled for role=${serviceRole}`);
 }
 
 async function loadPersistedOwnerChatId(): Promise<void> {

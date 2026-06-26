@@ -1,5 +1,7 @@
 import type { Context } from "telegraf";
+import { config } from "../../config.js";
 import { supabase } from "../../db/supabase.js";
+import { enqueueProcessVideoJob } from "../../jobs/queue.js";
 import { formatSummary } from "../formatter.js";
 import { processVideo } from "../../scheduler/cron.js";
 import { getOutputFormat } from "../../services/preferences.js";
@@ -130,6 +132,22 @@ export async function summarizeVideoById(
         title: video.title,
       });
     }
+  }
+
+  if (config.SERVICE_ROLE === "web") {
+    const telegramChatId = ctx.chat?.id ? String(ctx.chat.id) : null;
+    const job = await enqueueProcessVideoJob(video.id, 50, {
+      userId: userId ?? null,
+      telegramChatId,
+    });
+
+    if (!job) {
+      await ctx.reply("❌ Failed to queue this video. Please try again.");
+      return;
+    }
+
+    await ctx.reply(`✅ Queued "${video.title}". I’ll send the digest here when the worker finishes.`);
+    return;
   }
 
   const result = await processVideo(video, {

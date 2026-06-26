@@ -104,12 +104,22 @@ npm run dev
 
 Railway's public URL expects an HTTP listener, so the app starts a small health server on `process.env.PORT`.
 
-- `/` serves the product landing page and `/health` returns a JSON health response.
+- `/` serves the product landing page, `/health` returns a process health response, and `/ready` checks DB/queue readiness.
 - In Railway, set `DATABASE_URL` from the attached Postgres service.
 - Set `BOT_MODE=webhook` and `TELEGRAM_WEBHOOK_URL=https://<your-railway-domain>/telegram/<secret>` to avoid Telegram long-polling conflicts.
 - The real product interface is still Telegram.
 - Set all required environment variables in Railway before deploying.
 - Railway should run `npm run build` and then `npm start`, which starts the compiled app from `dist/index.js`.
+
+For a small private beta, `SERVICE_ROLE=all` is simplest: one Railway service runs the landing page, Telegram listener, scheduler, and worker. For scale, create separate Railway services from the same repo:
+
+| Service | Key env |
+|---|---|
+| `mindmonk-web` | `SERVICE_ROLE=web`, `BOT_MODE=webhook` |
+| `mindmonk-worker` | `SERVICE_ROLE=worker`, `JOB_WORKER_ENABLED=true` |
+| `mindmonk-scheduler` | `SERVICE_ROLE=scheduler` |
+
+In `web` mode, manual `/fetch` requests enqueue user-specific jobs instead of downloading audio or calling LLMs inline. The worker delivers the finished digest back to the requesting Telegram chat.
 
 ## Telegram Commands
 

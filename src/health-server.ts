@@ -1,4 +1,6 @@
 import http from "node:http";
+import { config } from "./config.js";
+import { dbQuery } from "./db/supabase.js";
 import { renderLandingPage } from "./landing-page.js";
 import { log } from "./utils/logger.js";
 
@@ -15,6 +17,7 @@ interface HealthServerOptions {
 interface HealthStatus {
   service: string;
   status: "ok";
+  role: string;
   uptime_seconds: number;
   timestamp: string;
 }
@@ -23,8 +26,22 @@ function buildHealthStatus(): HealthStatus {
   return {
     service: "mindmonk-digest",
     status: "ok",
+    role: config.SERVICE_ROLE,
     uptime_seconds: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
+  };
+}
+
+async function buildReadyStatus(): Promise<Record<string, unknown>> {
+  await dbQuery("SELECT 1");
+  const jobs = await dbQuery<{ status: string; count: number }>(
+    "SELECT status, COUNT(*)::int AS count FROM jobs GROUP BY status"
+  ).catch(() => ({ rows: [] }));
+
+  return {
+    ...buildHealthStatus(),
+    db: "ok",
+    jobs: Object.fromEntries(jobs.rows.map((row) => [row.status, row.count])),
   };
 }
 
@@ -71,6 +88,24 @@ export function startHealthServer(options: HealthServerOptions = {}): http.Serve
       });
       if (req.method !== "HEAD") res.end(renderLandingPage());
       else res.end();
+      return;
+    }
+
+    if (path === "/ready") {
+      try {
+        const ready = await buildReadyStatus();
+        res.writeHead(200, { "content-type": "application/json" });
+        if (req.method !== "HEAD") res.end(JSON.stringify(ready));
+        else res.end();
+      } catch (err) {
+        log.error("health", "Readiness check failed", err);
+        res.writeHead(503, { "content-type": "application/json" });
+        if (req.method !== "HEAD") {
+          res.end(JSON.stringify({ ...buildHealthStatus(), status: "not_ready" }));
+        } else {
+          res.end();
+        }
+      }
       return;
     }
 

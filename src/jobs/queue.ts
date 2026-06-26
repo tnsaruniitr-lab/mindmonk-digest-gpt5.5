@@ -25,6 +25,8 @@ export interface Job<TPayload = any> {
 
 export interface ProcessVideoJobPayload {
   videoId: string;
+  userId?: string | null;
+  telegramChatId?: string | null;
 }
 
 export const workerId = `worker-${randomUUID()}`;
@@ -78,16 +80,27 @@ export async function enqueueJob(
   return result.rows[0] ?? null;
 }
 
-export function processVideoIdempotencyKey(videoId: string): string {
-  return `process_video:${videoId}`;
+export function processVideoIdempotencyKey(
+  videoId: string,
+  userId?: string | null
+): string {
+  return userId ? `process_video:${videoId}:${userId}` : `process_video:${videoId}`;
 }
 
-export async function enqueueProcessVideoJob(videoId: string, priority = 100): Promise<Job | null> {
+export async function enqueueProcessVideoJob(
+  videoId: string,
+  priority = 100,
+  options: { userId?: string | null; telegramChatId?: string | null } = {}
+): Promise<Job | null> {
   return enqueueJob(
     "process_video",
-    { videoId } satisfies ProcessVideoJobPayload,
     {
-      idempotencyKey: processVideoIdempotencyKey(videoId),
+      videoId,
+      userId: options.userId ?? null,
+      telegramChatId: options.telegramChatId ?? null,
+    } satisfies ProcessVideoJobPayload,
+    {
+      idempotencyKey: processVideoIdempotencyKey(videoId, options.userId),
       priority,
       maxAttempts: 5,
     }

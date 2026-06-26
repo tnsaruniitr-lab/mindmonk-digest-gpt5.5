@@ -104,12 +104,16 @@ async function handleProcessVideo(job: Job<ProcessVideoJobPayload>): Promise<voi
   }
 
   const typedVideo = video as Video;
-  if (typedVideo.processed) {
+  if (typedVideo.processed && !job.payload.userId) {
     log.info("jobs", `Video ${videoId} already processed; completing job`);
     return;
   }
 
-  const result = await processVideo(typedVideo, { jobId: job.id });
+  const result = await processVideo(typedVideo, {
+    jobId: job.id,
+    userId: job.payload.userId ?? null,
+    telegramChatId: job.payload.telegramChatId ?? null,
+  });
   if (result.status === "summary_failed") {
     throw new Error(`Summary generation failed for video ${videoId}`);
   }
