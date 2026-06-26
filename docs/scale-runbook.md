@@ -8,7 +8,7 @@ Recommended Railway services from the same repo:
 
 | Service | Env | Purpose |
 |---|---|---|
-| `mindmonk-web` | `SERVICE_ROLE=web`, `BOT_MODE=webhook` | Telegram commands, landing page, health/readiness |
+| `mindmonk-digest-gpt5.5` | `SERVICE_ROLE=web`, `BOT_MODE=webhook` | Telegram commands, landing page, health/readiness |
 | `mindmonk-worker` | `SERVICE_ROLE=worker`, `JOB_WORKER_ENABLED=true` | Transcript, audio fallback, summaries, delivery |
 | `mindmonk-scheduler` | `SERVICE_ROLE=scheduler` | RSS polling and queue seeding |
 
@@ -21,6 +21,8 @@ Run before inviting users:
 ```bash
 npm run build
 npm run scale:check
+npm run ops:production-check
+npm run ops:railway-check
 ```
 
 Check production endpoints:
@@ -30,6 +32,29 @@ curl https://<domain>/health
 curl https://<domain>/ready
 curl -H "Authorization: Bearer $ADMIN_METRICS_TOKEN" https://<domain>/metrics
 ```
+
+Run the DB-backed checks inside the Railway production environment so they use the same secrets and private network as the deployed service:
+
+```bash
+railway ssh --service mindmonk-worker npm run scale:check
+railway ssh --service mindmonk-worker npm run ops:queue-capacity -- --write --jobs=1000
+```
+
+`railway run` executes locally with Railway variables injected; it will fail when `DATABASE_URL` points at `postgres.railway.internal`. Use Railway SSH, a Railway one-off/job execution path, or a temporary public DB TCP proxy for DB-backed gates.
+
+The queue-capacity check creates future-dated synthetic jobs with `scale_test:*` idempotency keys, verifies the requested insert count, and deletes them before exit. It does not download audio, call LLMs, or send Telegram messages.
+
+## Current Production Split
+
+As of the current implementation, the Railway production project is split into:
+
+| Service | Role | Public Domain |
+|---|---|---|
+| `mindmonk-digest-gpt5.5` | Web/API | `mindmonk-digest-gpt55-production.up.railway.app` |
+| `mindmonk-worker` | Background worker | None |
+| `mindmonk-scheduler` | RSS scheduler | None |
+
+There are currently two Postgres services visible in the Railway project. Treat the duplicate as an ops audit item: verify which `DATABASE_URL` is used by the app and take a backup before removing anything.
 
 ## Quota Defaults
 
@@ -78,6 +103,9 @@ Worker concurrency:
 Do not invite broad usage until:
 
 - `npm run scale:check` has no failures.
+- `npm run ops:production-check` reports the public service as `SERVICE_ROLE=web`.
+- `npm run ops:railway-check` confirms web, worker, and scheduler services are deployed with the expected roles.
+- `npm run ops:queue-capacity -- --write --jobs=1000` passes in the Railway production environment.
 - Dead jobs are zero.
 - Global caps are non-zero.
 - `MAX_VIDEO_PROCESSING_CONCURRENCY` has been load-tested above `1` before increasing it.

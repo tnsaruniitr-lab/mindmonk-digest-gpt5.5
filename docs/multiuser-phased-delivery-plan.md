@@ -152,8 +152,8 @@ The waterfall must be canonical per video. If 200 users ask for the same video, 
 | 4 | Implemented | Canonical `transcripts` table exists and is reused per video/language. |
 | 5 | Mostly implemented | `user_summaries`, per-user cached summaries, `/reprocess`, and delivery logs exist. Daily digest batching remains future work. |
 | 6 | Implemented | `usage_events`, `/usage`, plan limits, manual fetch/channel guards, global caps, and cost/token recording exist. |
-| 7 | Implemented | `SERVICE_ROLE=all|web|worker|scheduler`, web-mode job enqueueing, `/ready`, and protected `/metrics` exist. Railway services still need to be created/configured. |
-| 8 | Tooling added | `npm run scale:check` and `docs/scale-runbook.md` exist. Actual 100/500/1000-user load tests and backup restore drills still need to be run. |
+| 7 | Implemented | `SERVICE_ROLE=all|web|worker|scheduler`, web-mode job enqueueing, `/ready`, protected `/metrics`, and Railway web/worker/scheduler services exist. |
+| 8 | In progress | `npm run scale:check`, `npm run ops:production-check`, `npm run ops:railway-check`, `npm run ops:queue-capacity`, and `docs/scale-runbook.md` exist. Actual staged user-load tests and backup restore drills still need to be run before broad launch. |
 
 ## Phase 0: Baseline Hardening
 
