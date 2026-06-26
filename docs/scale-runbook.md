@@ -37,10 +37,13 @@ Run the DB-backed checks inside the Railway production environment so they use t
 
 ```bash
 railway ssh --service mindmonk-worker npm run scale:check
+railway ssh --service mindmonk-worker npm run ops:e2e-regression -- --write
 railway ssh --service mindmonk-worker npm run ops:queue-capacity -- --write --jobs=1000
 ```
 
 `railway run` executes locally with Railway variables injected; it will fail when `DATABASE_URL` points at `postgres.railway.internal`. Use Railway SSH, a Railway one-off/job execution path, or a temporary public DB TCP proxy for DB-backed gates.
+
+The E2E regression check creates synthetic users, preferences, subscriptions, video, transcript, user summaries, usage rows, and non-worker job types. It checks multiuser isolation, shared channel dedupe, canonical transcript uniqueness, per-user summary caching, quota enforcement, queue idempotency, lease/complete/dead-letter behavior, and cleanup. It does not download audio, call LLMs, or send Telegram messages.
 
 The queue-capacity check creates future-dated synthetic jobs with `scale_test:*` idempotency keys, verifies the requested insert count, and deletes them before exit. It does not download audio, call LLMs, or send Telegram messages.
 
@@ -105,6 +108,7 @@ Do not invite broad usage until:
 - `npm run scale:check` has no failures.
 - `npm run ops:production-check` reports the public service as `SERVICE_ROLE=web`.
 - `npm run ops:railway-check` confirms web, worker, and scheduler services are deployed with the expected roles.
+- `npm run ops:e2e-regression -- --write` passes in the Railway production environment.
 - `npm run ops:queue-capacity -- --write --jobs=1000` passes in the Railway production environment.
 - Dead jobs are zero.
 - Global caps are non-zero.
