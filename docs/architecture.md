@@ -122,14 +122,15 @@ Current tables:
 | `user_context` | Single-owner context/preferences |
 | `delivery_log` | Telegram delivery records |
 | `jobs` | Durable queued work with retry and lease state |
+| `usage_events` | Per-user and global usage/cost events |
 
 Current constraints:
 
 - Direct fetches and scheduled deliveries create/reuse `user_summaries` when a user is known.
 - `summaries` remains for legacy/global fallback paths.
-- Scheduled/RSS processing uses durable jobs, but on-demand `/fetch` still processes directly for fast Telegram feedback.
+- Scheduled/RSS processing uses durable jobs. In `SERVICE_ROLE=web`, on-demand `/fetch` also enqueues a user-specific job so heavy work runs in the worker. In `SERVICE_ROLE=all`, direct processing is still available for private-beta simplicity.
 - `user_context` remains only as a legacy compatibility table; normal user preferences live in `user_preferences`.
-- There is no quota, billing, or usage ledger yet.
+- `usage_events` records manual fetches, transcription minutes, proxy MB, LLM tokens, and estimated cost. `/usage` exposes user usage and global daily caps.
 
 ### Current Queue Behavior
 
@@ -533,14 +534,14 @@ Summary:
 | Preferences | Per-user `user_preferences` | Per-user `user_preferences` with delivery modes |
 | Channels | Global channels plus per-user subscriptions | Global channels plus per-user subscriptions |
 | Videos | Global | Global and deduped |
-| Transcripts | Canonical `transcripts` table | Canonical `transcripts` table with usage accounting |
+| Transcripts | Canonical `transcripts` table with usage accounting | Canonical `transcripts` table plus deeper transcript job decomposition |
 | Summaries | One personalized summary per user/video for user-known paths | Delivery jobs, daily digest, and richer resend controls |
 | Queue | Durable `jobs` table for scheduled processing | Dedicated job types for transcript, summary, delivery, and extraction |
 | Workers | One app process | Horizontally scalable workers |
 | Audio | Temp `/tmp` in app container | Same, with queue limits and cleanup tracking |
-| Cost tracking | None | `usage_events` and quotas |
-| Deployment | One Railway service | Web, worker, scheduler services |
-| Observability | Basic logs | Structured logs, metrics, admin status |
+| Cost tracking | `usage_events`, `/usage`, plan limits, global caps | Billing-grade usage windows and paid plans |
+| Deployment | `SERVICE_ROLE=all|web|worker|scheduler` | Separate Railway web, worker, and scheduler services |
+| Observability | `/health`, `/ready`, protected `/metrics`, readiness script | Dashboards, alerts, and runbook automation |
 
 ## Immediate Next Step
 

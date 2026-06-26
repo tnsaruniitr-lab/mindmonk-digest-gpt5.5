@@ -45,12 +45,66 @@ async function buildReadyStatus(): Promise<Record<string, unknown>> {
   };
 }
 
+async function buildMetricsStatus(): Promise<Record<string, unknown>> {
+  const [jobs, oldestQueued, usage, users, subscriptions] = await Promise.all([
+    dbQuery<{ status: string; count: number }>(
+      "SELECT status, COUNT(*)::int AS count FROM jobs GROUP BY status"
+    ),
+    dbQuery<{ oldest_queued_seconds: number | null }>(
+      `
+        SELECT EXTRACT(EPOCH FROM (now() - MIN(created_at)))::int AS oldest_queued_seconds
+        FROM jobs
+        WHERE status = 'queued'
+      `
+    ),
+    dbQuery<{
+      transcription_minutes: string | null;
+      llm_tokens: string | null;
+      estimated_cost_usd: string | null;
+    }>(
+      `
+        SELECT
+          COALESCE(SUM(quantity) FILTER (WHERE event_type = 'transcription_minutes'), 0) AS transcription_minutes,
+          COALESCE(SUM(quantity) FILTER (WHERE event_type = 'llm_tokens'), 0) AS llm_tokens,
+          COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd
+        FROM usage_events
+        WHERE created_at >= date_trunc('day', now())
+      `
+    ),
+    dbQuery<{ count: number }>("SELECT COUNT(*)::int AS count FROM users"),
+    dbQuery<{ count: number }>(
+      "SELECT COUNT(*)::int AS count FROM user_channel_subscriptions WHERE active = true"
+    ),
+  ]);
+
+  return {
+    ...buildHealthStatus(),
+    users: users.rows[0]?.count ?? 0,
+    active_subscriptions: subscriptions.rows[0]?.count ?? 0,
+    jobs: Object.fromEntries(jobs.rows.map((row) => [row.status, row.count])),
+    oldest_queued_seconds: oldestQueued.rows[0]?.oldest_queued_seconds ?? null,
+    usage_today: usage.rows[0] ?? {
+      transcription_minutes: 0,
+      llm_tokens: 0,
+      estimated_cost_usd: 0,
+    },
+  };
+}
+
+function hasMetricsAccess(req: http.IncomingMessage, url: URL): boolean {
+  if (!config.ADMIN_METRICS_TOKEN) return false;
+  const auth = req.headers.authorization ?? "";
+  const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1];
+  return bearer === config.ADMIN_METRICS_TOKEN || url.searchParams.get("token") === config.ADMIN_METRICS_TOKEN;
+}
+
 export function startHealthServer(options: HealthServerOptions = {}): http.Server {
   const port = Number(process.env.PORT ?? 3000);
   const host = "0.0.0.0";
 
   const server = http.createServer(async (req, res) => {
-    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const path = url.pathname;
 
     if (
       options.webhookPath &&
@@ -102,6 +156,30 @@ export function startHealthServer(options: HealthServerOptions = {}): http.Serve
         res.writeHead(503, { "content-type": "application/json" });
         if (req.method !== "HEAD") {
           res.end(JSON.stringify({ ...buildHealthStatus(), status: "not_ready" }));
+        } else {
+          res.end();
+        }
+      }
+      return;
+    }
+
+    if (path === "/metrics") {
+      if (!hasMetricsAccess(req, url)) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+
+      try {
+        const metrics = await buildMetricsStatus();
+        res.writeHead(200, { "content-type": "application/json" });
+        if (req.method !== "HEAD") res.end(JSON.stringify(metrics));
+        else res.end();
+      } catch (err) {
+        log.error("health", "Metrics check failed", err);
+        res.writeHead(503, { "content-type": "application/json" });
+        if (req.method !== "HEAD") {
+          res.end(JSON.stringify({ ...buildHealthStatus(), error: "metrics_unavailable" }));
         } else {
           res.end();
         }

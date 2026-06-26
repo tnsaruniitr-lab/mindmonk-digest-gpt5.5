@@ -31,6 +31,7 @@ TELEGRAM_WEBHOOK_URL=
 TELEGRAM_WEBHOOK_SECRET=
 BOT_MODE=auto
 SERVICE_ROLE=all
+ADMIN_METRICS_TOKEN=
 DATABASE_URL=
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-6
@@ -120,6 +121,20 @@ For a small private beta, `SERVICE_ROLE=all` is simplest: one Railway service ru
 | `mindmonk-scheduler` | `SERVICE_ROLE=scheduler` |
 
 In `web` mode, manual `/fetch` requests enqueue user-specific jobs instead of downloading audio or calling LLMs inline. The worker delivers the finished digest back to the requesting Telegram chat.
+
+Set `ADMIN_METRICS_TOKEN` to enable protected operational metrics:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_METRICS_TOKEN" https://<your-domain>/metrics
+```
+
+Before inviting users, run the non-mutating readiness check:
+
+```bash
+npm run scale:check
+```
+
+It verifies critical tables, indexes, queue health, service role settings, and quota guardrails.
 
 ## Telegram Commands
 

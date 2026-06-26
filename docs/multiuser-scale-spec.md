@@ -20,18 +20,14 @@ The scaled version must add multi-tenant ownership, dedupe, quotas, reliable que
 
 ## Current Constraints
 
-The current implementation is good for a single owner or very small private beta, but not for 1000 users.
+The current implementation is good for a small private beta, but still needs load testing and operational hardening before 1000 users.
 
-- `channels` are global, not owned by users.
-- `user_context` is global and keyed by label, not per user.
-- Telegram ownership is a single persisted owner chat.
-- Scheduled queue processing is guarded by an in-memory boolean only.
-- The queue is `videos.processed = false`; there is no durable job state, attempt count, priority, or lease.
+- Multiuser identity, preferences, subscriptions, canonical transcripts, per-user summaries, durable jobs, and usage events exist.
+- The queue currently has a coarse `process_video` job type. It has row locks, retries, leases, and idempotency, but not separate transcript/summary/delivery job types yet.
 - Raw audio is downloaded into the Railway container `/tmp` and deleted after transcription.
-- Transcript text is persisted in `summaries.raw_transcript`.
-- On-demand `/fetch` can overlap with scheduled processing.
-- Multiple Railway replicas would not coordinate safely.
-- There are no quotas, billing records, rate limits, or abuse controls.
+- `SERVICE_ROLE=web` queues manual fetches, but `SERVICE_ROLE=all` still allows direct processing for private-beta simplicity.
+- Plan limits, `/usage`, global caps, `/ready`, `/metrics`, and `scale:check` exist, but they are not a replacement for billing-grade quota windows and alerting.
+- Multiple worker replicas can coordinate at the job row level, but 1000-user readiness still needs load testing, alerting, backup restore testing, and a production runbook drill.
 
 ## Product Requirements
 
