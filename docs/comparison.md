@@ -130,7 +130,7 @@ Readout: main-thread runtime is very close between the two systems. Claude's ext
 
 ## Codebase Size Comparison
 
-Codex codebase size was computed from tracked Git files in this repository. Claude codebase size uses the provided `mindmonk-digest-claude4.8opus` metrics. LOC is raw line count, so it includes comments and blank lines.
+Codex codebase size was computed from tracked Git files in this repository. Claude codebase size uses the provided `mindmonk-digest-claude4.8opus` metrics. Raw LOC includes comments and blank lines. SLOC/non-blank LOC counts only lines with non-whitespace text.
 
 ### Codex Codebase Size - `mindmonk-digest-gpt5.5`
 
@@ -138,11 +138,13 @@ Codex codebase size was computed from tracked Git files in this repository. Clau
 |---|---:|---:|---:|
 | TypeScript source files | 46 | 50 | +4 |
 | TypeScript source LOC | 5,284 | 6,476 | +1,192 |
+| TypeScript source SLOC (non-blank) | 4,485 | 5,531 | +1,046 |
 | Test files | 0 | 0 | 0 |
 | Test LOC | 0 | 0 | 0 |
 | DB tables | 6 | 12 | +6 |
 | Docs (`.md`) files | 1 | 6 | +5 |
 | Docs LOC | 170 | 2,283 | +2,113 |
+| Docs LOC (non-blank) | 127 | 1,715 | +1,588 |
 | Runtime dependencies | 10 | 10 | 0 |
 | Total files in repo | 52 | 61 | +9 |
 
@@ -152,11 +154,13 @@ Codex codebase size was computed from tracked Git files in this repository. Clau
 |---|---:|---:|---:|
 | TypeScript source files | 29 | 39 | +10 |
 | TypeScript source LOC | 1,609 | 2,486 | +877 |
+| TypeScript source SLOC (non-blank) | 1,443 | 2,247 | +804 |
 | Test files | 0 | 7 | +7 |
 | Test LOC | 0 | 304 | +304 |
 | DB tables | 6 | 12 | +6 |
 | Docs (`.md`) files | 1 | 8 | +7 |
 | Docs LOC | 96 | 2,924 | +2,828 |
+| Docs LOC (non-blank) | 73 | ~2,298 | ~+2,225 |
 | Runtime dependencies | 8 | 8 | 0 |
 | Total files in repo | 38 | 63 | +25 |
 
@@ -166,15 +170,17 @@ Codex codebase size was computed from tracked Git files in this repository. Clau
 |---|---:|---:|---|
 | TypeScript source files | 50 | 39 | Codex has more app source files |
 | TypeScript source LOC | 6,476 | 2,486 | Codex has more source LOC in this repo snapshot |
+| TypeScript source SLOC (non-blank) | 5,531 | 2,247 | Codex has about 2.5x Claude's non-blank source SLOC |
 | Test files | 0 | 7 | Claude added tests; Codex has not yet added tests |
 | Test LOC | 0 | 304 | Claude has test coverage started |
 | DB tables | 12 | 12 | Same table count at current snapshot |
 | Docs (`.md`) files | 6 | 8 | Claude has two more docs files |
 | Docs LOC | 2,283 | 2,924 | Claude has more planning/docs LOC |
+| Docs LOC (non-blank) | 1,715 | ~2,298 | Claude has more non-blank docs LOC |
 | Runtime dependencies | 10 | 8 | Codex has two more runtime dependencies |
 | Total files in repo | 61 | 63 | Similar total file count |
 
-Readout: Claude's largest codebase delta came from docs, tests, and multi-tenant/hardening files. Codex's current repo is larger in TypeScript LOC, but Claude has more test files and docs LOC at the compared current snapshot.
+Readout: Claude's largest codebase delta came from docs, tests, and multi-tenant/hardening files. Codex's current repo is larger in TypeScript LOC and non-blank source SLOC, while Claude has more test files and docs LOC at the compared current snapshot.
 
 ## Claude Dev-Only Breakdown
 
